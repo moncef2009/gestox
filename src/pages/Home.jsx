@@ -20,6 +20,7 @@ import {
   Check,
   Payment,
   TrendingUp,
+  Info,
 } from "@mui/icons-material";
 import ClientDialog from "../components/ClientDialog";
 
@@ -124,7 +125,7 @@ const SalePage = () => {
         setSearchResults([]);
         setSelectedResultIndex(-1);
       }
-    }, 80); // délai scan
+    }, 80);
   };
 
   useEffect(() => {
@@ -312,7 +313,7 @@ const SalePage = () => {
   const handleQuantityDirectChange = (id, value) => {
     const numericValue = parseFloat(value);
 
-    if (isNaN(numericValue) || numericValue <= 0) {
+    if (isNaN(numericValue)) {
       setAddedToSale((prev) =>
         prev.map((item) => {
           if (item.id === id) {
@@ -720,7 +721,7 @@ const SalePage = () => {
   return (
     <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       {/* En-tête */}
-      <div className="mb-6">
+      <div className="mb-2">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow">
@@ -729,17 +730,16 @@ const SalePage = () => {
             <h1 className="text-2xl font-bold text-gray-900">Caisse</h1>
           </div>
           <div className="text-right">
-            <div className="text-xl font-bold text-emerald-600">
+            <div className="text-6xl font-bold text-emerald-600">
               {calculateTotal().toFixed(2)} DA
             </div>
             <div className="text-xs text-gray-600">Total vente</div>
           </div>
         </div>
-        <p className="text-sm text-gray-600">Gestion des ventes rapides</p>
       </div>
 
       {/* Barre de recherche */}
-      <div className="mb-4">
+      <div className="mb-2">
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="w-4 h-4 text-gray-400" />
@@ -752,7 +752,6 @@ const SalePage = () => {
               setScanInput(value);
               setSelectedResultIndex(-1);
 
-              // 🔥 SCAN AUTOMATIQUE (sans Enter)
               handleAutoScan(value);
 
               if (value.trim()) {
@@ -786,14 +785,20 @@ const SalePage = () => {
       </div>
 
       {/* Message de confirmation */}
-      {saleMessage && (
-        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm">
+      {/* Message de confirmation - TOUJOURS AFFICHÉ */}
+      <div className="mb-2 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm min-h-[48px]">
+        {saleMessage ? (
           <div className="flex items-center gap-2 text-emerald-800">
             <Receipt className="w-4 h-4" />
             {saleMessage}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="flex items-center gap-2 text-gray-500">
+            <Info className="w-4 h-4" />
+            Messages de vente s'afficheront ici...
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Section gauche - Liste des produits */}
@@ -928,7 +933,7 @@ const SalePage = () => {
           )}
         </div>
 
-        {/* Section droite - Panier */}
+        {/* Section droite - Panier sous forme de tableau */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="bg-gradient-to-r from-blue-700 to-indigo-800 px-4 py-3">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -944,127 +949,148 @@ const SalePage = () => {
                 <p className="text-sm text-gray-600">Panier vide</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {addedToSale.map((item) => {
-                  const product = products.find((p) => p.id === item.id);
-                  const stock = product ? product.currentQuantity : 0;
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="py-2 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                        Produit
+                      </th>
+                      <th className="py-2 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                        Prix
+                      </th>
+                      <th className="py-2 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                        Qté
+                      </th>
+                      <th className="py-2 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                        Sous-total
+                      </th>
+                      <th className="py-2 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {addedToSale.map((item) => {
+                      const product = products.find((p) => p.id === item.id);
+                      const stock = product ? product.currentQuantity : 0;
 
-                  return (
-                    <div
-                      key={item.id}
-                      className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-medium text-sm text-gray-900">
-                            {item.name}
-                          </h4>
-                          <div className="flex items-center gap-2 mt-1 text-xs text-gray-600">
-                            <span>
-                              {item.quantity.toFixed(2)} ×{" "}
-                              {item.sellingPriceRetail.toFixed(2)} DA
-                            </span>
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50">
+                          <td className="py-3 px-2">
+                            <div className="font-medium text-gray-900">
+                              {item.name}
+                            </div>
                             {stock > 0 && item.quantity > stock && (
-                              <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded-full flex items-center gap-1">
+                              <div className="text-xs text-rose-600 mt-1 flex items-center gap-1">
                                 <Warning className="w-3 h-3" />
                                 Stock: {stock.toFixed(2)}
-                              </span>
+                              </div>
                             )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveProduct(item.id)}
-                          className="text-rose-600 hover:text-rose-700 ml-2"
-                        >
-                          <Delete className="w-4 h-4" />
-                        </button>
-                      </div>
+                          </td>
+                          <td className="py-3 px-2">
+                            <div className="text-gray-700">
+                              {item.sellingPriceRetail.toFixed(2)} DA
+                            </div>
+                          </td>
+                          <td className="py-3 px-2">
+                            <div className="flex items-center gap-1">
+                              <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                <button
+                                  onClick={() =>
+                                    handleQuantityStepChange(item.id, -1)
+                                  }
+                                  disabled={item.quantity <= 1}
+                                  className="w-6 h-6 flex items-center justify-center bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                                >
+                                  -
+                                </button>
 
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0.01"
+                                  max={stock}
+                                  value={item.quantity}
+                                  onChange={(e) =>
+                                    handleQuantityDirectChange(
+                                      item.id,
+                                      e.target.value
+                                    )
+                                  }
+                                  onBlur={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    if (isNaN(value) || value < 0.01) {
+                                      handleQuantityDirectChange(item.id, "1");
+                                    }
+                                  }}
+                                  className="w-14 px-1 py-1 border-x border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 text-center text-xs"
+                                />
+
+                                <button
+                                  onClick={() =>
+                                    handleQuantityStepChange(item.id, 1)
+                                  }
+                                  disabled={item.quantity >= stock - 1}
+                                  className="w-6 h-6 flex items-center justify-center bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                                >
+                                  +
+                                </button>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Max: {stock.toFixed(2)}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-2">
+                            <div className="font-bold text-emerald-600">
+                              {item.subtotal.toFixed(2)} DA
+                            </div>
+                          </td>
+                          <td className="py-3 px-2">
                             <button
-                              onClick={() =>
-                                handleQuantityStepChange(item.id, 1)
-                              }
-                              disabled={item.quantity <= 1}
-                              className="w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Diminuer de 0.25"
+                              onClick={() => handleRemoveProduct(item.id)}
+                              className="text-rose-600 hover:text-rose-700"
+                              title="Supprimer"
                             >
-                              -
+                              <Delete className="w-4 h-4" />
                             </button>
-
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0.01"
-                              max={stock}
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleQuantityDirectChange(
-                                  item.id,
-                                  e.target.value
-                                )
-                              }
-                              onBlur={(e) => {
-                                const value = parseFloat(e.target.value);
-                                if (isNaN(value) || value < 0.01) {
-                                  handleQuantityDirectChange(item.id, "1");
-                                }
-                              }}
-                              className="w-20 px-2 py-1 text-sm border-x border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 text-center"
-                              placeholder="0.00"
-                            />
-
-                            <button
-                              onClick={() =>
-                                handleQuantityStepChange(item.id, 1)
-                              }
-                              disabled={item.quantity >= stock - 1}
-                              className="w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Augmenter de 0.5"
-                            >
-                              +
-                            </button>
-                          </div>
-
-                          <div className="text-xs text-gray-500 whitespace-nowrap">
-                            Max: {stock.toFixed(2)}
-                          </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="border-t border-gray-200">
+                    <tr>
+                      <td
+                        colSpan="6"
+                        className="py-3 px-2 text-right space-y-1"
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">
+                            Total articles:
+                          </span>
+                          <span className="text-sm font-medium text-gray-900">
+                            {calculateTotalItems().toFixed(2)} unités
+                          </span>
                         </div>
-                        <div>
-                          <div className="text-sm font-bold text-emerald-600">
-                            {item.subtotal.toFixed(2)} DA
-                          </div>
-                          <div className="text-xs text-green-600 text-right">
-                            +{item.totalProfit.toFixed(2)} DA
-                          </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                          <span className="text-base font-semibold text-gray-900">
+                            Total vente:
+                          </span>
+                          <span className="text-xl font-bold text-emerald-600">
+                            {calculateTotal().toFixed(2)} DA
+                          </span>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )}
           </div>
 
           <div className="border-t border-gray-200 p-4">
-            <div className="space-y-2 mb-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Total vente:</span>
-                <span className="font-bold text-gray-900">
-                  {calculateTotal().toFixed(2)} DA
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Articles:</span>
-                <span className="text-sm text-gray-600">
-                  {calculateTotalItems().toFixed(2)} unités
-                </span>
-              </div>
-            </div>
-
             <div className="flex gap-2">
               <button
                 onClick={handleClearSale}

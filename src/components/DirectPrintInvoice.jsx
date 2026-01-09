@@ -228,16 +228,17 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
           body {
             font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 5mm; /* Réduit de 20px à 5mm */
             color: #333;
             background: #fff;
-            line-height: 1.5;
+            line-height: 1.4; /* Réduit de 1.5 à 1.4 */
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            font-size: 10pt; /* Taille de police standard pour impression */
           }
           
           @page {
-            margin: 15mm;
+            margin: 8mm; /* Réduit de 15mm à 8mm */
             size: A4;
           }
           
@@ -245,14 +246,14 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
             max-width: 100%;
             margin: 0 auto;
             border: 1px solid #ddd;
-            border-radius: 4px;
+            border-radius: 3px; /* Réduit de 4px */
             overflow: hidden;
           }
           
           .invoice-header {
             background: #f8f9fa;
             color: #333;
-            padding: 20px 30px;
+            padding: 10px 15px; /* Réduit de 20px 30px */
             border-bottom: 1px solid #ddd;
           }
           
@@ -260,108 +261,111 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px; /* Réduit de 10px */
           }
           
           .invoice-title {
-            font-size: 24px;
+            font-size: 18pt; /* Réduit de 24px */
             font-weight: 600;
+            margin: 0;
           }
           
           .invoice-number {
-            font-size: 14px;
+            font-size: 11pt; /* Réduit de 14px */
             background: #fff;
-            padding: 5px 10px;
+            padding: 4px 8px; /* Réduit de 5px 10px */
             border: 1px solid #ddd;
-            border-radius: 3px;
+            border-radius: 2px; /* Réduit de 3px */
             font-weight: 500;
           }
           
           .invoice-dates {
             display: flex;
-            gap: 20px;
-            margin-top: 8px;
-            font-size: 13px;
+            gap: 15px; /* Réduit de 20px */
+            margin-top: 5px; /* Réduit de 8px */
+            font-size: 10pt; /* Réduit de 13px */
           }
           
           .date-item {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px; /* Réduit de 6px */
           }
           
           .invoice-body {
-            padding: 25px;
+            padding: 12px 15px; /* Réduit de 25px */
           }
           
           .companies-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 25px;
+            gap: 12px; /* Réduit de 20px */
+            margin-bottom: 15px; /* Réduit de 25px */
           }
           
           .company-card {
             border: 1px solid #ddd;
-            border-radius: 4px;
+            border-radius: 3px; /* Réduit de 4px */
             overflow: hidden;
           }
           
           .company-header {
             background: #f5f5f5;
-            padding: 10px 14px;
+            padding: 8px 10px; /* Réduit de 10px 14px */
             border-bottom: 1px solid #ddd;
             font-weight: 600;
             color: #333;
-            font-size: 14px;
+            font-size: 10.5pt; /* Réduit de 14px */
           }
           
           .company-content {
-            padding: 14px;
+            padding: 10px 12px; /* Réduit de 14px */
           }
           
           .company-info-line {
-            margin-bottom: 6px;
-            font-size: 13px;
+            margin-bottom: 4px; /* Réduit de 6px */
+            font-size: 9.5pt; /* Réduit de 13px */
             color: #555;
           }
           
           .company-name {
             font-weight: 600;
             color: #333;
-            font-size: 15px;
-            margin-bottom: 8px;
+            font-size: 11pt; /* Réduit de 15px */
+            margin-bottom: 6px; /* Réduit de 8px */
           }
           
           .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 25px 0;
-            font-size: 12px;
+            margin: 15px 0; /* Réduit de 25px */
+            font-size: 9pt; /* Réduit de 12px */
           }
           
           .items-table th {
             background: #f8f9fa;
-            padding: 10px 12px;
-            text-align: left;
+            padding: 6px 8px; /* Réduit de 10px 12px */
+            text-align: center;
             font-weight: 600;
             color: #555;
             border-bottom: 2px solid #ddd;
-            font-size: 11px;
+            font-size: 8.5pt; /* Réduit de 11px */
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px; /* Réduit de 0.5px */
           }
           
           .items-table td {
-            padding: 12px;
+            padding: 8px; /* Réduit de 12px */
             border-bottom: 1px solid #ddd;
             vertical-align: top;
+            text-align: center;
           }
           
           .product-name {
             font-weight: 500;
             color: #333;
-            font-size: 13px;
+            font-size: 9.5pt; /* Réduit de 13px */
+           
           }
           
           .text-right { text-align: right; }
@@ -370,17 +374,17 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
           
           .totals-container {
             background: #f8f9fa;
-            border-radius: 4px;
-            padding: 15px;
-            margin-top: 25px;
+            border-radius: 3px; /* Réduit de 4px */
+            padding: 10px; /* Réduit de 15px */
+            margin-top: 15px; /* Réduit de 25px */
             border: 1px solid #ddd;
           }
           
           .total-row {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            font-size: 13px;
+            padding: 5px 0; /* Réduit de 8px 0 */
+            font-size: 9.5pt; /* Réduit de 13px */
           }
           
           .total-row:not(:last-child) {
@@ -388,60 +392,98 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
           }
           
           .total-ttc {
-            font-size: 16px;
+            font-size: 11pt; /* Réduit de 16px */
             font-weight: 600;
             color: #333;
-            padding-top: 10px;
-            margin-top: 6px;
+            padding-top: 8px; /* Réduit de 10px */
+            margin-top: 4px; /* Réduit de 6px */
             border-top: 2px solid #666;
           }
           
           .amount-in-words {
             background: #f8f9fa;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 20px;
-            border-left: 4px solid #666;
+            padding: 10px; /* Réduit de 15px */
+            border-radius: 3px; /* Réduit de 4px */
+            margin-top: 12px; /* Réduit de 20px */
+            border-left: 3px solid #666; /* Réduit de 4px */
           }
           
           .amount-label {
-            font-size: 12px;
+            font-size: 9pt; /* Réduit de 12px */
             color: #666;
-            margin-bottom: 6px;
+            margin-bottom: 4px; /* Réduit de 6px */
           }
           
           .amount-text {
             font-weight: 500;
             color: #333;
-            font-size: 13px;
-            line-height: 1.5;
+            font-size: 9.5pt; /* Réduit de 13px */
+            line-height: 1.4; /* Réduit de 1.5 */
           }
           
           .signature-section {
-            margin-top: 40px;
-            padding-top: 15px;
+            margin-top: 25px; /* Réduit de 40px */
+            padding-top: 10px; /* Réduit de 15px */
             border-top: 1px solid #ddd;
             text-align: right;
           }
           
           .signature-box {
             display: inline-block;
-            padding: 15px 30px;
+            padding: 10px 20px; /* Réduit de 15px 30px */
             border-top: 2px solid #333;
-            min-width: 250px;
+            min-width: 200px; /* Réduit de 250px */
           }
           
           .signature-label {
             font-style: italic;
             color: #666;
-            font-size: 12px;
+            font-size: 9pt; /* Réduit de 12px */
+            margin-top: 4px; /* Réduit de 6px */
+          }
+          
+          /* Optimisations supplémentaires pour gagner de l'espace */
+          .company-info-small {
+            font-size: 8.5pt;
+            color: #666;
             margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid #eee;
+          }
+          
+          .company-info-small div {
+            margin-bottom: 2px;
+          }
+          
+          .tva-badge {
+            display: inline-block;
+            padding: 1px 4px; /* Réduit de 2px 6px */
+            background: #f5f5f5;
+            color: #555;
+            border: 1px solid #ddd;
+            border-radius: 2px;
+            font-size: 8.5pt; /* Réduit de 11px */
+            font-weight: 500;
+          }
+          
+          /* Réduction de la hauteur des lignes du tableau */
+          .items-table tr {
+            height: 32px; /* Hauteur fixe réduite */
+          }
+          
+          /* Optimisation pour les longs contenus */
+          .product-name {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
           
           @media print {
             body {
               margin: 0 !important;
               padding: 0 !important;
+              font-size: 9pt !important;
             }
             
             .invoice-container {
@@ -452,6 +494,16 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
             
             .no-print {
               display: none !important;
+            }
+            
+            /* Forcer les sauts de page */
+            .page-break {
+              page-break-before: always;
+            }
+            
+            /* Éviter les coupures dans les tableaux */
+            table {
+              page-break-inside: avoid;
             }
           }
         </style>
@@ -502,7 +554,7 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
                   <div class="company-info-line">
                     Email : ${invoice.companyInfo.email}
                   </div>
-                  <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; font-size: 12px;">
+                  <div class="company-info-small">
                     <div>RC : ${invoice.companyInfo.rc}</div>
                     <div>NIF : ${invoice.companyInfo.nif}</div>
                     <div>NIS : ${invoice.companyInfo.nis}</div>
@@ -531,10 +583,10 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
                   <div class="company-info-line">
                     Email : ${invoice.client.email || "Non spécifié"}
                   </div>
-                  <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; font-size: 12px;">
+                  <div class="company-info-small">
                     ${invoice.client.n_rc ? `<div>RC : ${invoice.client.n_rc}</div>` : ""}
                     ${invoice.client.n_if ? `<div>NIF : ${invoice.client.n_if}</div>` : ""}
-                    ${invoice.client.n_is ? `<div>NIS : ${invoice.client.n_is}</div>` : ""} <!-- Changé de NIC à NIS -->
+                    ${invoice.client.n_is ? `<div>NIS : ${invoice.client.n_is}</div>` : ""}
                   </div>
                 </div>
               </div>
@@ -564,7 +616,7 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
                       <td class="text-center">${item.quantity}</td>
                       <td class="text-right">${formatCurrency(item.unitPrice)} DA</td>
                       <td class="text-center">
-                        <span style="display: inline-block; padding: 2px 6px; background: #f5f5f5; color: #555; border: 1px solid #ddd; border-radius: 2px; font-size: 11px; font-weight: 500;">
+                        <span class="tva-badge">
                           ${item.tva}%
                         </span>
                       </td>
@@ -603,14 +655,12 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
             <!-- SIGNATURE -->
             <div class="signature-section">
               <div class="signature-box">
-                <div style="height: 40px; border-bottom: 1px solid #ccc; margin-bottom: 8px;"></div>
+                <div style="height: 30px; border-bottom: 1px solid #ccc; margin-bottom: 5px;"></div>
                 <div class="signature-label">
                   Signature et cachet de l'entreprise
                 </div>
               </div>
             </div>
-            
-    
           </div>
         </div>
         

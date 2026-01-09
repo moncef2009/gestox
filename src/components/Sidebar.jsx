@@ -82,11 +82,6 @@ const Sidebar = ({ open, setOpen }) => {
   // Nouveau menu Administration
   const adminItems = [
     {
-      path: "/boutiques",
-      icon: <Storefront className="w-4 h-4" />,
-      text: "Boutiques",
-    },
-    {
       path: "/entreprises",
       icon: <Business className="w-4 h-4" />,
       text: "Entreprises",
@@ -95,11 +90,6 @@ const Sidebar = ({ open, setOpen }) => {
       path: "/utilisateurs",
       icon: <People className="w-4 h-4" />,
       text: "Utilisateurs",
-    },
-    {
-      path: "/parametres",
-      icon: <AdminPanelSettings className="w-4 h-4" />,
-      text: "Paramètres",
     },
   ];
 
