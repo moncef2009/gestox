@@ -24,6 +24,8 @@ const ProductDialog = ({
   categories = [],
   onAddUnit,
   onAddCategory,
+  onDeleteUnit,
+  onDeleteCategory,
 }) => {
   // État local pour le formulaire
   const [form, setForm] = useState({
@@ -232,16 +234,15 @@ const ProductDialog = ({
   };
 
   const handleAddUnit = () => {
-    if (newUnit.trim() && !customUnits.includes(newUnit.trim())) {
-      onAddUnit(newUnit.trim());
+    if (newUnit.trim()) {
+      onAddUnit({ name: newUnit.trim() }); // ← Envoyer un objet !
       setNewUnit("");
       setOpenUnitDialog(false);
     }
   };
-
   const handleAddCategory = () => {
-    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      onAddCategory(newCategory.trim());
+    if (newCategory.trim()) {
+      onAddCategory({ name: newCategory.trim() }); // ← Envoyer un objet !
       setNewCategory("");
       setOpenCategoryDialog(false);
     }
@@ -367,11 +368,14 @@ const ProductDialog = ({
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                   >
                     <option value="">Non classé</option>
-                    {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
+                    {categories.map((category) => {
+                      const categoryName = category.name || category;
+                      return (
+                        <option key={categoryName} value={categoryName}>
+                          {categoryName}
+                        </option>
+                      );
+                    })}
                   </select>
                   <button
                     type="button"
@@ -442,11 +446,14 @@ const ProductDialog = ({
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                   >
                     <option value="">Sans unité</option>
-                    {customUnits.map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
+                    {customUnits.map((unit) => {
+                      const unitName = unit.name || unit;
+                      return (
+                        <option key={unitName} value={unitName}>
+                          {unitName}
+                        </option>
+                      );
+                    })}
                   </select>
                   <button
                     type="button"
@@ -694,96 +701,189 @@ const ProductDialog = ({
           </form>
         </div>
       </div>
-
-      {/* Dialog unité */}
+      // Dans ProductDialog.js, remplacez les dialogs d'unité et catégorie :
+      {/* Dialog unité - MODIFIÉ */}
       {openUnitDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="p-6 space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Straighten />
-                Nouvelle unité
-              </h3>
-              <input
-                type="text"
-                value={newUnit}
-                onChange={(e) => setNewUnit(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleAddUnit()}
-                placeholder="Nom de l'unité"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                autoFocus
-              />
-              {customUnits.length > 0 && (
-                <p className="text-sm text-gray-500">
-                  Unités disponibles : {customUnits.join(", ")}
-                </p>
-              )}
-              <div className="flex justify-end gap-3 pt-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Straighten />
+                  Gestion des unités
+                </h3>
                 <button
                   onClick={() => setOpenUnitDialog(false)}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium flex items-center gap-2"
+                  className="text-gray-500 hover:text-gray-700"
                 >
                   <Close />
-                  Annuler
                 </button>
-                <button
-                  onClick={handleAddUnit}
-                  disabled={
-                    !newUnit.trim() || customUnits.includes(newUnit.trim())
-                  }
-                  className="px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <Add />
-                  Ajouter
-                </button>
+              </div>
+
+              {/* Liste des unités existantes */}
+              {customUnits.length > 0 && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  <p className="text-sm font-medium text-gray-700">
+                    Unités existantes :
+                  </p>
+                  {customUnits.map((unit) => (
+                    <div
+                      key={unit._id || unit}
+                      className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-lg"
+                    >
+                      <span className="text-gray-700">
+                        {typeof unit === "object" ? unit.name : unit}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Supprimer l'unité "${typeof unit === "object" ? unit.name : unit}" ?`
+                            )
+                          ) {
+                            // Appeler la fonction de suppression via props
+                            if (onDeleteUnit && typeof unit === "object") {
+                              onDeleteUnit(unit._id, unit.name);
+                            }
+                          }
+                        }}
+                        className="text-rose-600 hover:text-rose-700 p-1"
+                      >
+                        <Delete className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Ajouter une nouvelle unité */}
+              <div className="pt-4 border-t border-gray-200">
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  Ajouter une nouvelle unité :
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newUnit}
+                    onChange={(e) => setNewUnit(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && handleAddUnit()}
+                    placeholder="Nom de l'unité"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleAddUnit}
+                    disabled={
+                      !newUnit.trim() ||
+                      customUnits.some(
+                        (u) =>
+                          (typeof u === "object" ? u.name : u) ===
+                          newUnit.trim()
+                      )
+                    }
+                    className="px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Add />
+                    Ajouter
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
-
-      {/* Dialog catégorie */}
+      {/* Dialog catégorie - MODIFIÉ */}
       {openCategoryDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="p-6 space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Category />
-                Nouvelle catégorie
-              </h3>
-              <input
-                type="text"
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleAddCategory()}
-                placeholder="Nom de la catégorie"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-                autoFocus
-              />
-              {categories.length > 0 && (
-                <p className="text-sm text-gray-500">
-                  Catégories disponibles : {categories.join(", ")}
-                </p>
-              )}
-              <div className="flex justify-end gap-3 pt-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Category />
+                  Gestion des catégories
+                </h3>
                 <button
                   onClick={() => setOpenCategoryDialog(false)}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium flex items-center gap-2"
+                  className="text-gray-500 hover:text-gray-700"
                 >
                   <Close />
-                  Annuler
                 </button>
-                <button
-                  onClick={handleAddCategory}
-                  disabled={
-                    !newCategory.trim() ||
-                    categories.includes(newCategory.trim())
-                  }
-                  className="px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <Add />
-                  Ajouter
-                </button>
+              </div>
+
+              {/* Liste des catégories existantes */}
+              {categories.length > 0 && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  <p className="text-sm font-medium text-gray-700">
+                    Catégories existantes :
+                  </p>
+                  {categories.map((category) => (
+                    <div
+                      key={category._id || category}
+                      className="flex justify-between items-center p-2 hover:bg-gray-50 rounded-lg"
+                    >
+                      <span className="text-gray-700">
+                        {typeof category === "object"
+                          ? category.name
+                          : category}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Supprimer la catégorie "${typeof category === "object" ? category.name : category}" ?`
+                            )
+                          ) {
+                            // Appeler la fonction de suppression via props
+                            if (
+                              onDeleteCategory &&
+                              typeof category === "object"
+                            ) {
+                              onDeleteCategory(category._id, category.name);
+                            }
+                          }
+                        }}
+                        className="text-rose-600 hover:text-rose-700 p-1"
+                      >
+                        <Delete className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Ajouter une nouvelle catégorie */}
+              <div className="pt-4 border-t border-gray-200">
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  Ajouter une nouvelle catégorie :
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && handleAddCategory()}
+                    placeholder="Nom de la catégorie"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleAddCategory}
+                    disabled={
+                      !newCategory.trim() ||
+                      categories.some(
+                        (c) =>
+                          (typeof c === "object" ? c.name : c) ===
+                          newCategory.trim()
+                      )
+                    }
+                    className="px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Add />
+                    Ajouter
+                  </button>
+                </div>
               </div>
             </div>
           </div>

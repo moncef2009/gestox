@@ -106,33 +106,40 @@ const SaleInvoicePage = () => {
   };
 
   useEffect(() => {
-    const savedSales = localStorage.getItem("sales");
-    const savedInvoices = localStorage.getItem("invoices");
-
-    if (!savedInvoices && savedSales) {
-      localStorage.setItem("invoices", JSON.stringify([]));
-    }
-
-    const savedInvoicesData = localStorage.getItem("invoices");
-    const savedClients = localStorage.getItem("clients");
-    const savedProducts = localStorage.getItem("products");
-
-    if (savedInvoicesData) {
-      setInvoices(JSON.parse(savedInvoicesData));
-    }
-
-    if (savedClients) {
-      setClients(JSON.parse(savedClients));
-    }
-
-    if (savedProducts) {
-      setProducts(JSON.parse(savedProducts));
-    }
+    loadInvoices();
+    loadClients();
+    loadProducts();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("invoices", JSON.stringify(invoices));
-  }, [invoices]);
+  const loadInvoices = async () => {
+    try {
+      const invoicesData = await window.db.getInvoices();
+      setInvoices(invoicesData || []);
+    } catch (error) {
+      console.error("Erreur lors du chargement des factures:", error);
+      setInvoices([]);
+    }
+  };
+
+  const loadClients = async () => {
+    try {
+      const clientsData = await window.db.getClients();
+      setClients(clientsData || []);
+    } catch (error) {
+      console.error("Erreur lors du chargement des clients:", error);
+      setClients([]);
+    }
+  };
+
+  const loadProducts = async () => {
+    try {
+      const productsData = await window.db.getProducts();
+      setProducts(productsData || []);
+    } catch (error) {
+      console.error("Erreur lors du chargement des produits:", error);
+      setProducts([]);
+    }
+  };
 
   useEffect(() => {
     if (form.status === "completementpayer") {
@@ -614,7 +621,7 @@ const SaleInvoicePage = () => {
     return words.trim();
   };
 
-  const handleSaveInvoice = () => {
+  const handleSaveInvoice = async () => {
     if (!selectedClient) {
       setSaleMessage("Veuillez sélectionner un client");
       setTimeout(() => setSaleMessage(""), 3000);
@@ -653,96 +660,159 @@ const SaleInvoicePage = () => {
       updatedAt: new Date().toISOString(),
     };
 
-    const updatedProducts = products.map((product) => {
-      const soldItem = form.items.find((item) => item.productId === product.id);
-      if (soldItem) {
-        return {
-          ...product,
-          currentQuantity: product.currentQuantity - soldItem.quantity,
-        };
+    try {
+      // Mettre à jour les quantités des produits
+      // Pour l'édition, nous devons d'abrestaurer l'ancien stock puis appliquer le nouveau
+      if (editingInvoice) {
+        // Restaurer les quantités des produits de l'ancienne facture
+        for (const oldItem of editingInvoice.items) {
+          const product = products.find((p) => p.id === oldItem.productId);
+          if (product) {
+            const restoredQuantity = product.currentQuantity + oldItem.quantity;
+            const updatedProduct = {
+              ...product,
+              currentQuantity: restoredQuantity,
+            };
+            await window.db.updateProduct(
+              product._id || product.id,
+              updatedProduct
+            );
+          }
+        }
+        // Recharger les produits après restauration
+        await loadProducts();
       }
-      return product;
-    });
 
-    localStorage.setItem("products", JSON.stringify(updatedProducts));
-    setProducts(updatedProducts);
+      // Appliquer les nouvelles quantités
+      for (const item of form.items) {
+        const product = products.find((p) => p.id === item.productId);
+        if (product) {
+          const newQuantity = product.currentQuantity - item.quantity;
+          const updatedProduct = {
+            ...product,
+            currentQuantity: Math.max(0, newQuantity),
+          };
 
-    const saleData = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      total: totalTTC,
-      payedAmount: form.payedAmount,
-      remainingAmount: remaining,
-      totalProfit: totalProfit,
-      products: form.items.map((item) => ({
-        id: item.productId,
-        name: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        subtotal: item.ttc,
-        purchasePrice:
-          products.find((p) => p.id === item.productId)?.purchasePrice || 0,
-        profitPerUnit:
-          item.profitPerUnit ||
-          item.unitPrice -
-            (products.find((p) => p.id === item.productId)?.purchasePrice || 0),
-        totalProfit:
-          item.totalProfit ||
-          (item.unitPrice -
-            (products.find((p) => p.id === item.productId)?.purchasePrice ||
-              0)) *
-            item.quantity,
-      })),
-      client: selectedClient,
-      status: form.status,
-      invoiceNumber: form.invoiceNumber,
-    };
+          await window.db.updateProduct(
+            product._id || product.id,
+            updatedProduct
+          );
+        }
+      }
 
-    const existingSales = JSON.parse(localStorage.getItem("sales") || "[]");
-    const updatedSales = [...existingSales, saleData];
-    localStorage.setItem("sales", JSON.stringify(updatedSales));
+      // Recharger les produits
+      await loadProducts();
 
-    if (editingInvoice) {
-      setInvoices(
-        invoices.map((inv) =>
-          inv.id === editingInvoice.id ? invoiceData : inv
-        )
+      // Préparer les données de vente
+      const saleData = {
+        id: editingInvoice ? editingInvoice.id : Date.now(),
+        date: form.date,
+        total: totalTTC,
+        payedAmount: form.payedAmount,
+        remainingAmount: remaining,
+        totalProfit: totalProfit,
+        products: form.items.map((item) => ({
+          id: item.productId,
+          name: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.ttc,
+          purchasePrice:
+            products.find((p) => p.id === item.productId)?.purchasePrice || 0,
+          profitPerUnit:
+            item.profitPerUnit ||
+            item.unitPrice -
+              (products.find((p) => p.id === item.productId)?.purchasePrice ||
+                0),
+          totalProfit:
+            item.totalProfit ||
+            (item.unitPrice -
+              (products.find((p) => p.id === item.productId)?.purchasePrice ||
+                0)) *
+              item.quantity,
+        })),
+        client: selectedClient,
+        status: form.status,
+        invoiceNumber: form.invoiceNumber,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Gérer la vente (mettre à jour si édition, créer si nouvelle)
+      if (editingInvoice) {
+        // Chercher la vente existante par numéro de facture
+        const allSales = await window.db.getSales();
+        const existingSale = allSales.find(
+          (sale) => sale.invoiceNumber === editingInvoice.invoiceNumber
+        );
+
+        if (existingSale) {
+          // Mettre à jour la vente existante
+          await window.db.updateSale(existingSale._id, saleData);
+        } else {
+          // Si pas trouvée, créer une nouvelle vente (pour compatibilité)
+          await window.db.addSale(saleData);
+        }
+      } else {
+        // Créer une nouvelle vente
+        await window.db.addSale(saleData);
+      }
+
+      // Enregistrer ou mettre à jour la facture
+      if (editingInvoice) {
+        await window.db.updateInvoice(
+          editingInvoice._id || editingInvoice.id,
+          invoiceData
+        );
+        setInvoices(
+          invoices.map((inv) =>
+            (inv._id || inv.id) === (editingInvoice._id || editingInvoice.id)
+              ? invoiceData
+              : inv
+          )
+        );
+      } else {
+        const savedInvoice = await window.db.addInvoice(invoiceData);
+        setInvoices([...invoices, savedInvoice]);
+      }
+
+      setSaleMessage(
+        `Vente ${editingInvoice ? "mise à jour" : "enregistrée"} ! Stock mis à jour. Total: ${totalTTC.toFixed(2)} DA`
       );
-    } else {
-      setInvoices([...invoices, invoiceData]);
+
+      const invoicePreviewData = {
+        ...invoiceData,
+        items: form.items.map((item) => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          priceType: item.priceType,
+          tva: item.tva || 19,
+          ht: item.ht,
+          ttc: item.ttc,
+          profitPerUnit: item.profitPerUnit || 0,
+          totalProfit: item.totalProfit || 0,
+        })),
+        totalHT,
+        totalTVA,
+        totalTTC,
+        totalProfit,
+      };
+
+      setSelectedInvoiceForPreview(invoicePreviewData);
+
+      handleCloseDialog();
+
+      setTimeout(() => setSaleMessage(""), 3000);
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement de la facture:", error);
+      setSaleMessage(
+        `Erreur lors de ${editingInvoice ? "la mise à jour" : "l'enregistrement"} de la facture`
+      );
+      setTimeout(() => setSaleMessage(""), 3000);
     }
-
-    setSaleMessage(
-      `Vente enregistrée ! Stock mis à jour. Total: ${totalTTC.toFixed(2)} DA`
-    );
-
-    const invoicePreviewData = {
-      ...invoiceData,
-      items: form.items.map((item) => ({
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        priceType: item.priceType,
-        tva: item.tva || 19,
-        ht: item.ht,
-        ttc: item.ttc,
-        profitPerUnit: item.profitPerUnit || 0,
-        totalProfit: item.totalProfit || 0,
-      })),
-      totalHT,
-      totalTVA,
-      totalTTC,
-      totalProfit,
-    };
-
-    setSelectedInvoiceForPreview(invoicePreviewData);
-
-    handleCloseDialog();
-
-    setTimeout(() => setSaleMessage(""), 3000);
   };
 
-  const handleQuickSale = () => {
+  const handleQuickSale = async () => {
     if (!selectedClient) {
       setSaleMessage("Veuillez sélectionner un client");
       setTimeout(() => setSaleMessage(""), 3000);
@@ -766,132 +836,153 @@ const SaleInvoicePage = () => {
 
     const newInvoiceNumber = getNextInvoiceNumber();
 
-    const updatedProducts = products.map((product) => {
-      const soldItem = form.items.find((item) => item.productId === product.id);
-      if (soldItem) {
-        return {
-          ...product,
-          currentQuantity: product.currentQuantity - soldItem.quantity,
-        };
+    try {
+      // Mettre à jour les quantités des produits
+      for (const item of form.items) {
+        const product = products.find((p) => p.id === item.productId);
+        if (product) {
+          const newQuantity = product.currentQuantity - item.quantity;
+          const updatedProduct = {
+            ...product,
+            currentQuantity: Math.max(0, newQuantity),
+          };
+
+          await window.db.updateProduct(
+            product._id || product.id,
+            updatedProduct
+          );
+        }
       }
-      return product;
-    });
 
-    localStorage.setItem("products", JSON.stringify(updatedProducts));
-    setProducts(updatedProducts);
+      // Recharger les produits
+      await loadProducts();
 
-    const invoiceData = {
-      ...form,
-      invoiceNumber: newInvoiceNumber,
-      id: Date.now(),
-      client: selectedClient,
-      totalHT,
-      totalTVA,
-      totalTTC,
-      totalProfit,
-      payedAmount: totalTTC,
-      remainingAmount: 0,
-      status: "completementpayer",
-      paymentMethod: "cash",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      const invoiceData = {
+        ...form,
+        invoiceNumber: newInvoiceNumber,
+        id: Date.now(),
+        client: selectedClient,
+        totalHT,
+        totalTVA,
+        totalTTC,
+        totalProfit,
+        payedAmount: totalTTC,
+        remainingAmount: 0,
+        status: "completementpayer",
+        paymentMethod: "cash",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-    const saleData = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      total: totalTTC,
-      payedAmount: totalTTC,
-      remainingAmount: 0,
-      totalProfit: totalProfit,
-      products: form.items.map((item) => ({
-        id: item.productId,
-        name: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        subtotal: item.ttc,
-        purchasePrice:
-          products.find((p) => p.id === item.productId)?.purchasePrice || 0,
-        profitPerUnit:
-          item.profitPerUnit ||
-          item.unitPrice -
-            (products.find((p) => p.id === item.productId)?.purchasePrice || 0),
-        totalProfit:
-          item.totalProfit ||
-          (item.unitPrice -
-            (products.find((p) => p.id === item.productId)?.purchasePrice ||
-              0)) *
-            item.quantity,
-      })),
-      client: selectedClient,
-      status: "completementpayer",
-      invoiceNumber: newInvoiceNumber,
-    };
+      const saleData = {
+        id: Date.now(),
+        date: new Date().toISOString(),
+        total: totalTTC,
+        payedAmount: totalTTC,
+        remainingAmount: 0,
+        totalProfit: totalProfit,
+        products: form.items.map((item) => ({
+          id: item.productId,
+          name: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.ttc,
+          purchasePrice:
+            products.find((p) => p.id === item.productId)?.purchasePrice || 0,
+          profitPerUnit:
+            item.profitPerUnit ||
+            item.unitPrice -
+              (products.find((p) => p.id === item.productId)?.purchasePrice ||
+                0),
+          totalProfit:
+            item.totalProfit ||
+            (item.unitPrice -
+              (products.find((p) => p.id === item.productId)?.purchasePrice ||
+                0)) *
+              item.quantity,
+        })),
+        client: selectedClient,
+        status: "completementpayer",
+        invoiceNumber: newInvoiceNumber,
+      };
 
-    const existingSales = JSON.parse(localStorage.getItem("sales") || "[]");
-    const updatedSales = [...existingSales, saleData];
-    localStorage.setItem("sales", JSON.stringify(updatedSales));
+      // Enregistrer la vente
+      await window.db.addSale(saleData);
 
-    setInvoices([...invoices, invoiceData]);
+      // Enregistrer la facture
+      const savedInvoice = await window.db.addInvoice(invoiceData);
+      setInvoices([...invoices, savedInvoice]);
 
-    setSaleMessage(
-      `Vente rapide enregistrée ! Total: ${totalTTC.toFixed(2)} DA`
-    );
+      setSaleMessage(
+        `Vente rapide enregistrée ! Total: ${totalTTC.toFixed(2)} DA`
+      );
 
-    const invoicePreviewData = {
-      ...invoiceData,
-      items: form.items.map((item) => ({
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        priceType: item.priceType,
-        tva: item.tva || 19,
-        ht: item.ht,
-        ttc: item.ttc,
-        profitPerUnit: item.profitPerUnit || 0,
-        totalProfit: item.totalProfit || 0,
-      })),
-      totalHT,
-      totalTVA,
-      totalTTC,
-      totalProfit,
-    };
+      const invoicePreviewData = {
+        ...invoiceData,
+        items: form.items.map((item) => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          priceType: item.priceType,
+          tva: item.tva || 19,
+          ht: item.ht,
+          ttc: item.ttc,
+          profitPerUnit: item.profitPerUnit || 0,
+          totalProfit: item.totalProfit || 0,
+        })),
+        totalHT,
+        totalTVA,
+        totalTTC,
+        totalProfit,
+      };
 
-    setSelectedInvoiceForPreview(invoicePreviewData);
+      setSelectedInvoiceForPreview(invoicePreviewData);
 
-    const nextInvoiceNumber = getNextInvoiceNumber();
-    setForm({
-      invoiceNumber: nextInvoiceNumber,
-      date: new Date().toISOString().split("T")[0],
-      client: null,
-      companyInfo: {
-        name: "Votre Entreprise SARL",
-        address: "123 Rue Principale, Ville, Pays",
-        phone: "+213 XX XX XX XX",
-        email: "contact@entreprise.dz",
-        rc: "RC 123456789",
-        nif: "NIF 987654321",
-        nis: "NIS 456789123",
-      },
-      items: [],
-      status: "completementpayer",
-      payedAmount: 0,
-      paymentMethod: "cash",
-    });
-    setSelectedClient(null);
+      const nextInvoiceNumber = getNextInvoiceNumber();
+      setForm({
+        invoiceNumber: nextInvoiceNumber,
+        date: new Date().toISOString().split("T")[0],
+        client: null,
+        companyInfo: {
+          name: "Votre Entreprise SARL",
+          address: "123 Rue Principale, Ville, Pays",
+          phone: "+213 XX XX XX XX",
+          email: "contact@entreprise.dz",
+          rc: "RC 123456789",
+          nif: "NIF 987654321",
+          nis: "NIS 456789123",
+        },
+        items: [],
+        status: "completementpayer",
+        payedAmount: 0,
+        paymentMethod: "cash",
+      });
+      setSelectedClient(null);
 
-    setTimeout(() => setSaleMessage(""), 3000);
+      setTimeout(() => setSaleMessage(""), 3000);
+    } catch (error) {
+      console.error("Erreur lors de la vente rapide:", error);
+      setSaleMessage("Erreur lors de la vente rapide");
+      setTimeout(() => setSaleMessage(""), 3000);
+    }
   };
 
-  const handleDeleteInvoice = (id) => {
+  const handleDeleteInvoice = async (id) => {
     if (
       window.confirm(
         "Êtes-vous sûr de vouloir supprimer cette facture ? Cette action est irréversible. Note: La vente associée restera dans l'historique des ventes."
       )
     ) {
-      setInvoices(invoices.filter((inv) => inv.id !== id));
-      setSaleMessage("Facture supprimée (la vente reste dans l'historique)");
-      setTimeout(() => setSaleMessage(""), 3000);
+      try {
+        await window.db.deleteInvoice(id);
+        setInvoices(invoices.filter((inv) => (inv._id || inv.id) !== id));
+        setSaleMessage("Facture supprimée (la vente reste dans l'historique)");
+        setTimeout(() => setSaleMessage(""), 3000);
+      } catch (error) {
+        console.error("Erreur lors de la suppression de la facture:", error);
+        setSaleMessage("Erreur lors de la suppression de la facture");
+        setTimeout(() => setSaleMessage(""), 3000);
+      }
     }
   };
 
@@ -1265,7 +1356,7 @@ const SaleInvoicePage = () => {
                     <tbody className="bg-white divide-y divide-gray-100">
                       {currentInvoices.map((invoice) => (
                         <tr
-                          key={invoice.id}
+                          key={invoice._id || invoice.id}
                           className="hover:bg-gray-50 transition-colors"
                         >
                           <td className="px-6 py-4">
@@ -1334,7 +1425,9 @@ const SaleInvoicePage = () => {
                                 <Edit className="w-5 h-5" />
                               </button>
                               <button
-                                onClick={() => handleDeleteInvoice(invoice.id)}
+                                onClick={() =>
+                                  handleDeleteInvoice(invoice._id || invoice.id)
+                                }
                                 className="p-2 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
                                 title="Supprimer"
                               >
@@ -1609,7 +1702,7 @@ const SaleInvoicePage = () => {
                       ) : (
                         filteredClients.map((client) => (
                           <button
-                            key={client.id}
+                            key={client._id || client.id}
                             onClick={() => handleSelectClient(client)}
                             className="w-full text-left p-3 hover:bg-gray-50 flex items-center justify-between border-b border-gray-100 last:border-b-0"
                           >
@@ -1695,7 +1788,7 @@ const SaleInvoicePage = () => {
                       <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg bg-white">
                         {filteredProducts.map((product) => (
                           <div
-                            key={product.id}
+                            key={product._id || product.id}
                             className={`p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${
                               product.currentQuantity === 0
                                 ? "bg-rose-50 opacity-60"
@@ -2211,13 +2304,18 @@ const SaleInvoicePage = () => {
       <ClientDialog
         open={showClientDialog}
         onClose={() => setShowClientDialog(false)}
-        onClientSaved={(clientData, action) => {
+        onClientSaved={async (clientData, action) => {
           if (action === "add") {
-            const updatedClients = [...clients, clientData];
-            setClients(updatedClients);
-            localStorage.setItem("clients", JSON.stringify(updatedClients));
-
-            handleSelectClient(clientData);
+            try {
+              const savedClient = await window.db.addClient(clientData);
+              const updatedClients = [...clients, savedClient];
+              setClients(updatedClients);
+              handleSelectClient(savedClient);
+            } catch (error) {
+              console.error("Erreur lors de l'ajout du client:", error);
+              setSaleMessage("Erreur lors de l'ajout du client");
+              setTimeout(() => setSaleMessage(""), 3000);
+            }
           }
           setShowClientDialog(false);
         }}

@@ -53,12 +53,15 @@ const BonsAchat = () => {
   const [directPrintBonAchat, setDirectPrintBonAchat] = useState(null);
 
   useEffect(() => {
-    const savedBonsAchat = localStorage.getItem("bonsAchat");
-    if (savedBonsAchat) {
-      const parsedBonsAchat = JSON.parse(savedBonsAchat);
+    loadBonsAchat();
+    loadProduits();
+  }, []);
 
+  const loadBonsAchat = async () => {
+    try {
+      const bonsAchatData = await window.db.getBonsAchat();
       // Migration pour s'assurer que tous les bons ont payedAmount et remainingAmount
-      const updatedBonsAchat = parsedBonsAchat.map((bon) => {
+      const updatedBonsAchat = bonsAchatData.map((bon) => {
         if (!bon.payedAmount) {
           return {
             ...bon,
@@ -71,13 +74,30 @@ const BonsAchat = () => {
       });
 
       setBonsAchat(updatedBonsAchat);
-      localStorage.setItem("bonsAchat", JSON.stringify(updatedBonsAchat));
+      // Mettre à jour les bons migrés dans la base de données
+      updatedBonsAchat.forEach(async (bon) => {
+        if (!bon.payedAmount) {
+          await window.db.updateBonAchat(bon._id || bon.id, {
+            payedAmount: 0,
+            remainingAmount: bon.total,
+            status: "non-payer",
+          });
+        }
+      });
+    } catch (error) {
+      console.error("Erreur lors du chargement des bons d'achat:", error);
+      setBonsAchat([]);
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    localStorage.setItem("bonsAchat", JSON.stringify(bonsAchat));
-  }, [bonsAchat]);
+  const loadProduits = async () => {
+    try {
+      const produitsData = await window.db.getProducts();
+      // Les produits sont maintenant chargés depuis NeDB
+    } catch (error) {
+      console.error("Erreur lors du chargement des produits:", error);
+    }
+  };
 
   useEffect(() => {
     let result = [...bonsAchat];
@@ -182,39 +202,61 @@ const BonsAchat = () => {
     setSelectedBonAchat(null);
   };
 
-  const handleMakePayment = () => {
+  const handleMakePayment = async () => {
     if (!selectedBonAchat || paymentAmount <= 0) return;
 
-    const updatedBonsAchat = bonsAchat.map((bon) => {
-      if (bon.id === selectedBonAchat.id) {
-        const newPayedAmount = bon.payedAmount + parseFloat(paymentAmount);
-        const newRemaining = Math.max(0, bon.total - newPayedAmount);
-        const newStatus =
-          newRemaining === 0
-            ? "completement-payer"
-            : newPayedAmount === 0
-              ? "non-payer"
-              : "partielement-payer";
+    try {
+      const updatedBonsAchat = bonsAchat.map((bon) => {
+        if (
+          bon._id === selectedBonAchat._id ||
+          bon.id === selectedBonAchat.id
+        ) {
+          const newPayedAmount = bon.payedAmount + parseFloat(paymentAmount);
+          const newRemaining = Math.max(0, bon.total - newPayedAmount);
+          const newStatus =
+            newRemaining === 0
+              ? "completement-payer"
+              : newPayedAmount === 0
+                ? "non-payer"
+                : "partielement-payer";
 
-        return {
-          ...bon,
-          payedAmount: newPayedAmount,
-          remainingAmount: newRemaining,
-          status: newStatus,
-        };
+          return {
+            ...bon,
+            payedAmount: newPayedAmount,
+            remainingAmount: newRemaining,
+            status: newStatus,
+          };
+        }
+        return bon;
+      });
+
+      setBonsAchat(updatedBonsAchat);
+
+      // Mettre à jour dans NeDB
+      const bonToUpdate = updatedBonsAchat.find(
+        (bon) =>
+          bon._id === selectedBonAchat._id || bon.id === selectedBonAchat.id
+      );
+
+      if (bonToUpdate) {
+        await window.db.updateBonAchat(bonToUpdate._id || bonToUpdate.id, {
+          payedAmount: bonToUpdate.payedAmount,
+          remainingAmount: bonToUpdate.remainingAmount,
+          status: bonToUpdate.status,
+        });
       }
-      return bon;
-    });
 
-    setBonsAchat(updatedBonsAchat);
-    localStorage.setItem("bonsAchat", JSON.stringify(updatedBonsAchat));
+      setActionMessage(
+        `Paiement de ${parseFloat(paymentAmount).toFixed(2)} DA enregistré pour le bon #${selectedBonAchat.numero}`
+      );
+      setTimeout(() => setActionMessage(""), 3000);
 
-    setActionMessage(
-      `Paiement de ${parseFloat(paymentAmount).toFixed(2)} DA enregistré pour le bon #${selectedBonAchat.numero}`
-    );
-    setTimeout(() => setActionMessage(""), 3000);
-
-    handleCloseDialogs();
+      handleCloseDialogs();
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement du paiement:", error);
+      setActionMessage("Erreur lors de l'enregistrement du paiement");
+      setTimeout(() => setActionMessage(""), 3000);
+    }
   };
 
   const handlePayFullRemaining = () => {
@@ -233,61 +275,81 @@ const BonsAchat = () => {
     setOpenDialog(false);
   };
 
-  const handleBonAchatSaved = (bonAchatData) => {
-    const newBonAchat = {
-      ...bonAchatData,
-      payedAmount: 0,
-      remainingAmount: bonAchatData.total,
-      status: "non-payer",
-    };
-    setBonsAchat([...bonsAchat, newBonAchat]);
-    updateStockAfterNewBonAchat(newBonAchat);
+  const handleBonAchatSaved = async (bonAchatData) => {
+    try {
+      const newBonAchat = {
+        ...bonAchatData,
+        payedAmount: 0,
+        remainingAmount: bonAchatData.total,
+        status: "non-payer",
+      };
 
-    setActionMessage("Bon d'achat ajouté avec succès");
-    setTimeout(() => setActionMessage(""), 3000);
+      // Ajouter à NeDB
+      const savedBonAchat = await window.db.addBonAchat(newBonAchat);
+
+      // Mettre à jour l'état local avec l'ID retourné par NeDB
+      const bonAchatWithId = { ...newBonAchat, _id: savedBonAchat._id };
+      setBonsAchat([...bonsAchat, bonAchatWithId]);
+
+      await updateStockAfterNewBonAchat(bonAchatWithId);
+
+      setActionMessage("Bon d'achat ajouté avec succès");
+      setTimeout(() => setActionMessage(""), 3000);
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du bon d'achat:", error);
+      setActionMessage("Erreur lors de l'ajout du bon d'achat");
+      setTimeout(() => setActionMessage(""), 3000);
+    }
   };
 
-  const updateStockAfterNewBonAchat = (bonAchatData) => {
-    const produits = JSON.parse(localStorage.getItem("products") || "[]");
-    const updatedProduits = [...produits];
+  const updateStockAfterNewBonAchat = async (bonAchatData) => {
+    try {
+      const produits = await window.db.getProducts();
+      const updatedProduits = [...produits];
 
-    bonAchatData.produits.forEach((produitAchete) => {
-      if (produitAchete.isNew) {
-        // Ajouter nouveau produit
-        const nouveauProduit = {
-          id: produitAchete.id,
-          name: produitAchete.nom,
-          purchasePrice: produitAchete.prixAchat,
-          sellingPriceRetail: produitAchete.prixAchat * 1.3, // 30% de marge par défaut
-          sellingPriceWholesale: produitAchete.prixAchat * 1.2, // 20% pour gros
-          currentQuantity: produitAchete.quantiteAchetee,
-          alertQuantity: produitAchete.quantiteAchetee * 0.2,
-          unit: produitAchete.unite,
-          tva: produitAchete.tva,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          category: "",
-        };
-        updatedProduits.push(nouveauProduit);
-      } else {
-        // Mettre à jour produit existant
-        const index = updatedProduits.findIndex(
-          (p) => p.id === produitAchete.id
-        );
-        if (index !== -1) {
-          updatedProduits[index] = {
-            ...updatedProduits[index],
-            currentQuantity:
-              updatedProduits[index].currentQuantity +
-              produitAchete.quantiteAchetee,
+      for (const produitAchete of bonAchatData.produits) {
+        if (produitAchete.isNew) {
+          // Ajouter nouveau produit
+          const nouveauProduit = {
+            id: produitAchete.id,
+            name: produitAchete.nom,
             purchasePrice: produitAchete.prixAchat,
+            sellingPriceRetail: produitAchete.prixAchat * 1.3, // 30% de marge par défaut
+            sellingPriceWholesale: produitAchete.prixAchat * 1.2, // 20% pour gros
+            currentQuantity: produitAchete.quantiteAchetee,
+            alertQuantity: produitAchete.quantiteAchetee * 0.2,
+            unit: produitAchete.unite,
+            tva: produitAchete.tva,
+            createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
+            category: "",
           };
+
+          await window.db.addProduct(nouveauProduit);
+        } else {
+          // Mettre à jour produit existant
+          const existingProduct = produits.find(
+            (p) => p.id === produitAchete.id
+          );
+          if (existingProduct) {
+            const updatedProduct = {
+              ...existingProduct,
+              currentQuantity:
+                existingProduct.currentQuantity + produitAchete.quantiteAchetee,
+              purchasePrice: produitAchete.prixAchat,
+              updatedAt: new Date().toISOString(),
+            };
+
+            await window.db.updateProduct(
+              existingProduct._id || existingProduct.id,
+              updatedProduct
+            );
+          }
         }
       }
-    });
-
-    localStorage.setItem("products", JSON.stringify(updatedProduits));
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour du stock:", error);
+    }
   };
 
   const handleOpenDeleteDialog = (bonAchat) => {
@@ -295,42 +357,59 @@ const BonsAchat = () => {
     setShowDeleteDialog(true);
   };
 
-  const handleDeleteBonAchat = () => {
+  const handleDeleteBonAchat = async () => {
     if (!selectedBonAchat) return;
 
-    const updatedBonsAchat = bonsAchat.filter(
-      (ba) => ba.id !== selectedBonAchat.id
-    );
-    setBonsAchat(updatedBonsAchat);
-    localStorage.setItem("bonsAchat", JSON.stringify(updatedBonsAchat));
+    try {
+      // Supprimer de NeDB
+      await window.db.deleteBonAchat(
+        selectedBonAchat._id || selectedBonAchat.id
+      );
 
-    // Restaurer le stock
-    restoreStockAfterDelete(selectedBonAchat);
+      // Mettre à jour l'état local
+      const updatedBonsAchat = bonsAchat.filter(
+        (ba) =>
+          (ba._id || ba.id) !== (selectedBonAchat._id || selectedBonAchat.id)
+      );
+      setBonsAchat(updatedBonsAchat);
 
-    setActionMessage(`Bon d'achat #${selectedBonAchat.numero} supprimé`);
-    setTimeout(() => setActionMessage(""), 3000);
+      // Restaurer le stock
+      await restoreStockAfterDelete(selectedBonAchat);
 
-    handleCloseDialogs();
+      setActionMessage(`Bon d'achat #${selectedBonAchat.numero} supprimé`);
+      setTimeout(() => setActionMessage(""), 3000);
+
+      handleCloseDialogs();
+    } catch (error) {
+      console.error("Erreur lors de la suppression du bon d'achat:", error);
+      setActionMessage("Erreur lors de la suppression");
+      setTimeout(() => setActionMessage(""), 3000);
+    }
   };
 
-  const restoreStockAfterDelete = (bonAchat) => {
-    const produits = JSON.parse(localStorage.getItem("products") || "[]");
-    const updatedProduits = [...produits];
+  const restoreStockAfterDelete = async (bonAchat) => {
+    try {
+      const produits = await window.db.getProducts();
 
-    bonAchat.produits.forEach((produitAchete) => {
-      const index = updatedProduits.findIndex((p) => p.id === produitAchete.id);
-      if (index !== -1) {
-        updatedProduits[index] = {
-          ...updatedProduits[index],
-          currentQuantity:
-            updatedProduits[index].currentQuantity -
-            produitAchete.quantiteAchetee,
-          updatedAt: new Date().toISOString(),
-        };
+      for (const produitAchete of bonAchat.produits) {
+        const existingProduct = produits.find((p) => p.id === produitAchete.id);
+        if (existingProduct) {
+          const updatedProduct = {
+            ...existingProduct,
+            currentQuantity:
+              existingProduct.currentQuantity - produitAchete.quantiteAchetee,
+            updatedAt: new Date().toISOString(),
+          };
+
+          await window.db.updateProduct(
+            existingProduct._id || existingProduct.id,
+            updatedProduct
+          );
+        }
       }
-    });
-
-    localStorage.setItem("products", JSON.stringify(updatedProduits));
+    } catch (error) {
+      console.error("Erreur lors de la restauration du stock:", error);
+    }
   };
 
   const handleSort = (field) => {
@@ -353,7 +432,7 @@ const BonsAchat = () => {
 
   const handleExportExcel = () => {
     const data = filteredBonsAchat.map((bon) => ({
-      ID: bon.id,
+      ID: bon._id || bon.id,
       Date: new Date(bon.date).toLocaleDateString("fr-FR"),
       Fournisseur: bon.fournisseurNom || "Non spécifié",
       "Total (DA)": bon.total.toFixed(2),
@@ -1036,15 +1115,19 @@ const BonsAchat = () => {
                   return (
                     <>
                       <tr
-                        key={bonAchat.id}
+                        key={bonAchat._id || bonAchat.id}
                         className="hover:bg-gray-50 transition-colors"
                       >
                         <td className="px-6 py-4">
                           <button
-                            onClick={() => toggleProduits(bonAchat.id)}
+                            onClick={() =>
+                              toggleProduits(bonAchat._id || bonAchat.id)
+                            }
                             className="flex items-center gap-2 text-blue-600 hover:text-blue-700"
                           >
-                            {expandedBonAchat === bonAchat.id ? "▼" : "▶"}
+                            {expandedBonAchat === (bonAchat._id || bonAchat.id)
+                              ? "▼"
+                              : "▶"}
                             <span className="text-sm">
                               {bonAchat.produits?.length || 0} produit(s)
                             </span>
@@ -1142,7 +1225,7 @@ const BonsAchat = () => {
                       </tr>
 
                       {/* Ligne des produits détaillés */}
-                      {expandedBonAchat === bonAchat.id && (
+                      {expandedBonAchat === (bonAchat._id || bonAchat.id) && (
                         <tr>
                           <td colSpan="9" className="px-6 py-4 bg-gray-50">
                             <BonAchatProduits bonAchat={bonAchat} />

@@ -57,12 +57,15 @@ const SalesHistoryPage = () => {
   const [expandedSale, setExpandedSale] = useState(null);
 
   useEffect(() => {
-    const savedSales = localStorage.getItem("sales");
-    if (savedSales) {
-      let parsedSales = JSON.parse(savedSales);
+    loadSales();
+  }, []);
+
+  const loadSales = async () => {
+    try {
+      const salesData = await window.db.getSales();
 
       // Migration des ventes existantes pour inclure le bénéfice
-      const updatedSales = parsedSales.map((sale) => {
+      const updatedSales = salesData.map((sale) => {
         if (!sale.totalProfit) {
           const calculatedProfit =
             sale.products?.reduce((profit, product) => {
@@ -77,16 +80,28 @@ const SalesHistoryPage = () => {
         return sale;
       });
 
-      if (JSON.stringify(updatedSales) !== JSON.stringify(parsedSales)) {
-        localStorage.setItem("sales", JSON.stringify(updatedSales));
-        setSales(updatedSales);
-        setFilteredSales(updatedSales);
-      } else {
-        setSales(parsedSales);
-        setFilteredSales(parsedSales);
+      // Mettre à jour les ventes migrées dans la base de données
+      for (const sale of updatedSales) {
+        if (!sale.totalProfit) {
+          const calculatedProfit =
+            sale.products?.reduce((profit, product) => {
+              return profit + (product.totalProfit || 0);
+            }, 0) || 0;
+
+          await window.db.updateSale(sale._id || sale.id, {
+            totalProfit: calculatedProfit,
+          });
+        }
       }
+
+      setSales(updatedSales);
+      setFilteredSales(updatedSales);
+    } catch (error) {
+      console.error("Erreur lors du chargement des ventes:", error);
+      setSales([]);
+      setFilteredSales([]);
     }
-  }, []);
+  };
 
   useEffect(() => {
     let result = [...sales];
@@ -271,58 +286,74 @@ const SalesHistoryPage = () => {
     setSelectedSale(null);
   };
 
-  const handleMakePayment = () => {
+  const handleMakePayment = async () => {
     if (!selectedSale || paymentAmount <= 0) return;
 
-    const updatedSales = sales.map((sale) => {
-      if (sale.id === selectedSale.id) {
-        const newPayedAmount = sale.payedAmount + parseFloat(paymentAmount);
-        const newRemaining = Math.max(0, sale.total - newPayedAmount);
-        const newStatus =
-          newRemaining === 0
-            ? "completementpayer"
-            : newPayedAmount === 0
-              ? "nonpayer"
-              : "partielementpayer";
+    try {
+      const updatedSales = sales.map((sale) => {
+        if ((sale._id || sale.id) === (selectedSale._id || selectedSale.id)) {
+          const newPayedAmount = sale.payedAmount + parseFloat(paymentAmount);
+          const newRemaining = Math.max(0, sale.total - newPayedAmount);
+          const newStatus =
+            newRemaining === 0
+              ? "completementpayer"
+              : newPayedAmount === 0
+                ? "nonpayer"
+                : "partielementpayer";
 
-        const updatedSale = {
-          ...sale,
-          payedAmount: newPayedAmount,
-          remainingAmount: newRemaining,
-          status: newStatus,
-        };
+          const updatedSale = {
+            ...sale,
+            payedAmount: newPayedAmount,
+            remainingAmount: newRemaining,
+            status: newStatus,
+          };
 
-        const invoices = JSON.parse(localStorage.getItem("invoices") || "[]");
-        const updatedInvoices = invoices.map((invoice) => {
-          if (
-            invoice.id === sale.id ||
-            invoice.invoiceNumber === sale.invoiceNumber
-          ) {
-            return {
-              ...invoice,
-              payedAmount: newPayedAmount,
-              remainingAmount: newRemaining,
-              status: newStatus,
-            };
-          }
-          return invoice;
-        });
-        localStorage.setItem("invoices", JSON.stringify(updatedInvoices));
+          // Mettre à jour dans NeDB
+          window.db.updateSale(sale._id || sale.id, updatedSale);
 
-        return updatedSale;
+          return updatedSale;
+        }
+        return sale;
+      });
+
+      setSales(updatedSales);
+
+      // Mettre à jour également les factures correspondantes
+      const invoices = await window.db.getInvoices();
+      for (const invoice of invoices) {
+        if (
+          invoice.id === selectedSale.id ||
+          invoice.invoiceNumber === selectedSale.invoiceNumber
+        ) {
+          const newPayedAmount =
+            invoice.payedAmount + parseFloat(paymentAmount);
+          const newRemaining = Math.max(0, invoice.totalTTC - newPayedAmount);
+          const newStatus =
+            newRemaining === 0
+              ? "completementpayer"
+              : newPayedAmount === 0
+                ? "nonpayer"
+                : "partielementpayer";
+
+          await window.db.updateInvoice(invoice._id || invoice.id, {
+            payedAmount: newPayedAmount,
+            remainingAmount: newRemaining,
+            status: newStatus,
+          });
+        }
       }
-      return sale;
-    });
 
-    setSales(updatedSales);
-    localStorage.setItem("sales", JSON.stringify(updatedSales));
+      setActionMessage(
+        `Paiement de ${parseFloat(paymentAmount).toFixed(2)} DA enregistré pour la vente #${selectedSale.id}`
+      );
+      setTimeout(() => setActionMessage(""), 3000);
 
-    setActionMessage(
-      `Paiement de ${parseFloat(paymentAmount).toFixed(2)} DA enregistré pour la vente #${selectedSale.id}`
-    );
-    setTimeout(() => setActionMessage(""), 3000);
-
-    handleCloseDialogs();
+      handleCloseDialogs();
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement du paiement:", error);
+      setActionMessage("Erreur lors de l'enregistrement du paiement");
+      setTimeout(() => setActionMessage(""), 3000);
+    }
   };
 
   const handlePayFullRemaining = () => {
@@ -330,17 +361,27 @@ const SalesHistoryPage = () => {
     setPaymentAmount(selectedSale.remainingAmount);
   };
 
-  const handleDeleteSale = () => {
+  const handleDeleteSale = async () => {
     if (!selectedSale) return;
 
-    const updatedSales = sales.filter((sale) => sale.id !== selectedSale.id);
-    setSales(updatedSales);
-    localStorage.setItem("sales", JSON.stringify(updatedSales));
+    try {
+      await window.db.deleteSale(selectedSale._id || selectedSale.id);
 
-    setActionMessage(`Vente #${selectedSale.id} supprimée`);
-    setTimeout(() => setActionMessage(""), 3000);
+      const updatedSales = sales.filter(
+        (sale) =>
+          (sale._id || sale.id) !== (selectedSale._id || selectedSale.id)
+      );
+      setSales(updatedSales);
 
-    handleCloseDialogs();
+      setActionMessage(`Vente #${selectedSale.id} supprimée`);
+      setTimeout(() => setActionMessage(""), 3000);
+
+      handleCloseDialogs();
+    } catch (error) {
+      console.error("Erreur lors de la suppression de la vente:", error);
+      setActionMessage("Erreur lors de la suppression de la vente");
+      setTimeout(() => setActionMessage(""), 3000);
+    }
   };
 
   const handleSort = (field) => {

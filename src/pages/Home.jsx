@@ -51,17 +51,29 @@ const SalePage = () => {
   const scanTimeoutRef = useRef(null);
 
   useEffect(() => {
-    const savedProducts = localStorage.getItem("products");
-    const savedClients = localStorage.getItem("clients");
-
-    if (savedProducts) {
-      setProducts(JSON.parse(savedProducts));
-    }
-
-    if (savedClients) {
-      setClients(JSON.parse(savedClients));
-    }
+    loadProducts();
+    loadClients();
   }, []);
+
+  const loadProducts = async () => {
+    try {
+      const productsData = await window.db.getProducts();
+      setProducts(productsData);
+    } catch (error) {
+      console.error("Erreur lors du chargement des produits:", error);
+      setProducts([]);
+    }
+  };
+
+  const loadClients = async () => {
+    try {
+      const clientsData = await window.db.getClients();
+      setClients(clientsData);
+    } catch (error) {
+      console.error("Erreur lors du chargement des clients:", error);
+      setClients([]);
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -489,19 +501,25 @@ const SalePage = () => {
     setClientSearch("");
   };
 
-  const handleClientSaved = (clientData, action) => {
+  const handleClientSaved = async (clientData, action) => {
     if (action === "add") {
-      const updatedClients = [...clients, clientData];
-      setClients(updatedClients);
-      localStorage.setItem("clients", JSON.stringify(updatedClients));
+      try {
+        const savedClient = await window.db.addClient(clientData);
+        const updatedClients = [...clients, savedClient];
+        setClients(updatedClients);
 
-      setSaleForm({
-        ...saleForm,
-        client: clientData,
-      });
+        setSaleForm({
+          ...saleForm,
+          client: savedClient,
+        });
 
-      setSaleMessage("Client ajouté et sélectionné");
-      setTimeout(() => setSaleMessage(""), 3000);
+        setSaleMessage("Client ajouté et sélectionné");
+        setTimeout(() => setSaleMessage(""), 3000);
+      } catch (error) {
+        console.error("Erreur lors de l'ajout du client:", error);
+        setSaleMessage("Erreur lors de l'ajout du client");
+        setTimeout(() => setSaleMessage(""), 3000);
+      }
     }
 
     setShowClientDialog(false);
@@ -550,7 +568,7 @@ const SalePage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSaveSale = () => {
+  const handleSaveSale = async () => {
     if (!validateForm()) return;
 
     const total = calculateTotal();
@@ -578,44 +596,54 @@ const SalePage = () => {
       status: saleForm.status,
     };
 
-    const existingSales = JSON.parse(localStorage.getItem("sales") || "[]");
-    const updatedSales = [...existingSales, sale];
-    localStorage.setItem("sales", JSON.stringify(updatedSales));
+    try {
+      // Enregistrer la vente dans NeDB
+      await window.db.addSale(sale);
 
-    const updatedProducts = products.map((product) => {
-      const soldProduct = addedToSale.find((item) => item.id === product.id);
-      if (soldProduct) {
-        const newQuantity =
-          Math.round((product.currentQuantity - soldProduct.quantity) * 100) /
-          100;
-        return {
-          ...product,
-          currentQuantity: Math.max(0, newQuantity),
-        };
+      // Mettre à jour les quantités des produits
+      for (const item of addedToSale) {
+        const product = products.find((p) => p.id === item.id);
+        if (product) {
+          const newQuantity = Math.max(
+            0,
+            Math.round((product.currentQuantity - item.quantity) * 100) / 100
+          );
+          const updatedProduct = {
+            ...product,
+            currentQuantity: newQuantity,
+          };
+          await window.db.updateProduct(
+            product._id || product.id,
+            updatedProduct
+          );
+        }
       }
-      return product;
-    });
 
-    localStorage.setItem("products", JSON.stringify(updatedProducts));
-    setProducts(updatedProducts);
+      // Recharger les produits pour refléter les nouvelles quantités
+      await loadProducts();
 
-    setSaleMessage(
-      `Vente enregistrée avec succès ! Total: ${total.toFixed(2)} DA`
-    );
+      setSaleMessage(
+        `Vente enregistrée avec succès ! Total: ${total.toFixed(2)} DA`
+      );
 
-    setAddedToSale([]);
-    setSaleForm({
-      client: null,
-      status: "completementpayer",
-      payedAmount: 0,
-    });
+      setAddedToSale([]);
+      setSaleForm({
+        client: null,
+        status: "completementpayer",
+        payedAmount: 0,
+      });
 
-    handleCloseDialog();
+      handleCloseDialog();
 
-    setTimeout(() => setSaleMessage(""), 3000);
+      setTimeout(() => setSaleMessage(""), 3000);
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement de la vente:", error);
+      setSaleMessage("Erreur lors de l'enregistrement de la vente");
+      setTimeout(() => setSaleMessage(""), 3000);
+    }
   };
 
-  const handleQuickSale = () => {
+  const handleQuickSale = async () => {
     if (addedToSale.length === 0) {
       setSaleMessage("Ajoutez au moins un produit");
       setTimeout(() => setSaleMessage(""), 3000);
@@ -646,37 +674,49 @@ const SalePage = () => {
       status: "completementpayer",
     };
 
-    const existingSales = JSON.parse(localStorage.getItem("sales") || "[]");
-    const updatedSales = [...existingSales, sale];
-    localStorage.setItem("sales", JSON.stringify(updatedSales));
+    try {
+      // Enregistrer la vente dans NeDB
+      await window.db.addSale(sale);
 
-    const updatedProducts = products.map((product) => {
-      const soldProduct = addedToSale.find((item) => item.id === product.id);
-      if (soldProduct) {
-        const newQuantity =
-          Math.round((product.currentQuantity - soldProduct.quantity) * 100) /
-          100;
-        return {
-          ...product,
-          currentQuantity: Math.max(0, newQuantity),
-        };
+      // Mettre à jour les quantités des produits
+      for (const item of addedToSale) {
+        const product = products.find((p) => p.id === item.id);
+        if (product) {
+          const newQuantity = Math.max(
+            0,
+            Math.round((product.currentQuantity - item.quantity) * 100) / 100
+          );
+          const updatedProduct = {
+            ...product,
+            currentQuantity: newQuantity,
+          };
+          await window.db.updateProduct(
+            product._id || product.id,
+            updatedProduct
+          );
+        }
       }
-      return product;
-    });
 
-    localStorage.setItem("products", JSON.stringify(updatedProducts));
-    setProducts(updatedProducts);
+      // Recharger les produits
+      await loadProducts();
 
-    setSaleMessage(`Vente rapide enregistrée ! Total: ${total.toFixed(2)} DA`);
+      setSaleMessage(
+        `Vente rapide enregistrée ! Total: ${total.toFixed(2)} DA`
+      );
 
-    setAddedToSale([]);
-    setSaleForm({
-      client: null,
-      status: "completementpayer",
-      payedAmount: 0,
-    });
+      setAddedToSale([]);
+      setSaleForm({
+        client: null,
+        status: "completementpayer",
+        payedAmount: 0,
+      });
 
-    setTimeout(() => setSaleMessage(""), 3000);
+      setTimeout(() => setSaleMessage(""), 3000);
+    } catch (error) {
+      console.error("Erreur lors de la vente rapide:", error);
+      setSaleMessage("Erreur lors de la vente rapide");
+      setTimeout(() => setSaleMessage(""), 3000);
+    }
   };
 
   const formatStatus = (status) => {
@@ -785,7 +825,6 @@ const SalePage = () => {
       </div>
 
       {/* Message de confirmation */}
-      {/* Message de confirmation - TOUJOURS AFFICHÉ */}
       <div className="mb-2 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm min-h-[48px]">
         {saleMessage ? (
           <div className="flex items-center gap-2 text-emerald-800">
@@ -850,7 +889,7 @@ const SalePage = () => {
             <div className="space-y-2">
               {currentProducts.map((product) => (
                 <div
-                  key={product.id}
+                  key={product._id || product.id}
                   className={`border rounded-lg p-3 hover:bg-gray-50 transition-all ${
                     product.currentQuantity === 0
                       ? "border-rose-200 bg-rose-50 opacity-60"
@@ -960,6 +999,9 @@ const SalePage = () => {
                         Prix
                       </th>
                       <th className="py-2 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+                        Unité
+                      </th>
+                      <th className="py-2 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                         Qté
                       </th>
                       <th className="py-2 px-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
@@ -991,6 +1033,13 @@ const SalePage = () => {
                           <td className="py-3 px-2">
                             <div className="text-gray-700">
                               {item.sellingPriceRetail.toFixed(2)} DA
+                            </div>
+                          </td>
+                          <td className="py-3 px-2">
+                            {" "}
+                            {/* Nouvelle cellule pour l'unité */}
+                            <div className="text-sm text-gray-600">
+                              {item.unit || "Unité"}
                             </div>
                           </td>
                           <td className="py-3 px-2">
@@ -1318,7 +1367,7 @@ const SalePage = () => {
                         ) : (
                           filteredClients.map((client) => (
                             <button
-                              key={client.id}
+                              key={client._id || client.id}
                               onClick={() => handleSelectClient(client)}
                               className="w-full text-left p-2 hover:bg-gray-50 flex items-center justify-between border-b border-gray-100 last:border-b-0"
                             >

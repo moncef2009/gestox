@@ -42,63 +42,78 @@ const BonAchatDialog = ({
   const [searchProduit, setSearchProduit] = useState("");
   const [showProduitsList, setShowProduitsList] = useState(false);
 
+  // Charger les fournisseurs et produits depuis NeDB
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const fournisseursData = await window.db.getFournisseurs();
+        const produitsData = await window.db.getProducts();
+
+        setFournisseurs(fournisseursData || []);
+        setProduits(produitsData || []);
+      } catch (error) {
+        console.error("Erreur lors du chargement des données:", error);
+        setFournisseurs([]);
+        setProduits([]);
+      }
+    };
+
+    loadData();
+  }, []);
+
   // Générer le prochain numéro (BA-001-2026)
-  const generateNextNumero = () => {
-    const savedBonsAchat = localStorage.getItem("bonsAchat");
-    if (!savedBonsAchat) return `BA-001-${new Date().getFullYear()}`;
+  const generateNextNumero = async () => {
+    try {
+      const bonsAchat = await window.db.getBonsAchat();
+      const currentYear = new Date().getFullYear();
 
-    const bonsAchat = JSON.parse(savedBonsAchat);
-    const currentYear = new Date().getFullYear();
+      const currentYearBons = bonsAchat.filter((ba) => {
+        const baYear = ba.numero.split("-")[2];
+        return baYear === currentYear.toString();
+      });
 
-    const currentYearBons = bonsAchat.filter((ba) => {
-      const baYear = ba.numero.split("-")[2];
-      return baYear === currentYear.toString();
-    });
+      if (currentYearBons.length === 0) return `BA-001-${currentYear}`;
 
-    if (currentYearBons.length === 0) return `BA-001-${currentYear}`;
+      const maxNumero = Math.max(
+        ...currentYearBons.map((ba) => {
+          const match = ba.numero.match(/BA-(\d+)-/);
+          return match ? parseInt(match[1]) : 0;
+        })
+      );
 
-    const maxNumero = Math.max(
-      ...currentYearBons.map((ba) => {
-        const match = ba.numero.match(/BA-(\d+)-/);
-        return match ? parseInt(match[1]) : 0;
-      })
-    );
-
-    const nextNum = (maxNumero + 1).toString().padStart(3, "0");
-    return `BA-${nextNum}-${currentYear}`;
+      const nextNum = (maxNumero + 1).toString().padStart(3, "0");
+      return `BA-${nextNum}-${currentYear}`;
+    } catch (error) {
+      console.error("Erreur lors de la génération du numéro:", error);
+      return `BA-001-${new Date().getFullYear()}`;
+    }
   };
 
   useEffect(() => {
-    const savedFournisseurs = localStorage.getItem("fournisseurs");
-    const savedProduits = localStorage.getItem("products");
+    const initializeForm = async () => {
+      if (editingBonAchat) {
+        setIsEditing(true);
+        setForm({
+          ...editingBonAchat,
+          date: editingBonAchat.date.split("T")[0],
+          payedAmount: editingBonAchat.payedAmount || 0,
+        });
+        setSelectedProduits(editingBonAchat.produits || []);
+      } else {
+        setIsEditing(false);
+        const nextNumero = await generateNextNumero();
+        resetForm(nextNumero);
+      }
+    };
 
-    if (savedFournisseurs) {
-      setFournisseurs(JSON.parse(savedFournisseurs));
-    }
-
-    if (savedProduits) {
-      setProduits(JSON.parse(savedProduits));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (editingBonAchat) {
-      setIsEditing(true);
-      setForm({
-        ...editingBonAchat,
-        date: editingBonAchat.date.split("T")[0],
-        payedAmount: editingBonAchat.payedAmount || 0,
-      });
-      setSelectedProduits(editingBonAchat.produits || []);
-    } else {
-      setIsEditing(false);
-      resetForm();
+    if (open) {
+      initializeForm();
     }
   }, [editingBonAchat, open]);
 
-  const resetForm = () => {
+  const resetForm = (nextNumero = "") => {
     setForm({
-      numero: generateNextNumero(),
+      numero: nextNumero,
       date: new Date().toISOString().split("T")[0],
       fournisseurId: "",
       fournisseurNom: "",
@@ -221,7 +236,7 @@ const BonAchatDialog = ({
       setSelectedProduits(updatedProduits);
     } else {
       const produitAchete = {
-        id: produit.id,
+        id: produit._id || produit.id,
         nom: produit.name,
         quantiteAchetee: "1",
         prixAchat: produit.purchasePrice,
@@ -265,17 +280,23 @@ const BonAchatDialog = ({
     setSelectedProduits(updatedProduits);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!validateForm()) return;
 
     const now = new Date().toISOString();
+    const id = editingBonAchat
+      ? editingBonAchat._id || editingBonAchat.id
+      : uuidv4();
 
     const bonAchatData = {
-      id: editingBonAchat ? editingBonAchat.id : uuidv4(),
-      ...form,
+      _id: editingBonAchat ? editingBonAchat._id : undefined, // Ne pas inclure _id pour les nouveaux
+      numero: form.numero,
       date: new Date(form.date).toISOString(),
+      fournisseurId: form.fournisseurId,
+      fournisseurNom: form.fournisseurNom,
+      notes: form.notes,
       produits: selectedProduits.map((p) => ({
         ...p,
         quantiteAchetee: parseFloat(p.quantiteAchetee),
@@ -289,9 +310,67 @@ const BonAchatDialog = ({
       updatedAt: now,
     };
 
-    onBonAchatSaved(bonAchatData, isEditing ? "edit" : "add");
-    resetForm();
-    onClose();
+    try {
+      // Mettre à jour le stock des produits
+      for (const produit of selectedProduits) {
+        if (!produit.isNew) {
+          // Pour les produits existants, augmenter le stock
+          const existingProduit = produits.find(
+            (p) => (p._id || p.id) === produit.id
+          );
+          if (existingProduit) {
+            const newQuantity =
+              (existingProduit.currentQuantity || 0) +
+              parseFloat(produit.quantiteAchetee);
+            await window.db.updateProduct(
+              existingProduit._id || existingProduit.id,
+              { currentQuantity: newQuantity }
+            );
+          }
+        } else {
+          // Pour les nouveaux produits, les créer dans la base
+          const newProductData = {
+            name: produit.nom,
+            purchasePrice: parseFloat(produit.prixAchat),
+            sellingPriceRetail: parseFloat(produit.prixAchat) * 1.3, // 30% de marge par défaut
+            sellingPriceWholesale: parseFloat(produit.prixAchat) * 1.2, // 20% de marge pour gros
+            currentQuantity: parseFloat(produit.quantiteAchetee),
+            unit: produit.unite,
+            tva: parseFloat(produit.tva),
+            category: "Acheté",
+            barcodes: [],
+          };
+          await window.db.addProduct(newProductData);
+        }
+      }
+
+      // Si édition, restaurer l'ancien stock d'abord
+      if (editingBonAchat && editingBonAchat.produits) {
+        for (const oldProduit of editingBonAchat.produits) {
+          if (!oldProduit.isNew) {
+            const existingProduit = produits.find(
+              (p) => (p._id || p.id) === oldProduit.id
+            );
+            if (existingProduit) {
+              const restoredQuantity =
+                (existingProduit.currentQuantity || 0) -
+                parseFloat(oldProduit.quantiteAchetee);
+              await window.db.updateProduct(
+                existingProduit._id || existingProduit.id,
+                { currentQuantity: Math.max(0, restoredQuantity) }
+              );
+            }
+          }
+        }
+      }
+
+      onBonAchatSaved(bonAchatData, isEditing ? "edit" : "add");
+      resetForm();
+      onClose();
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement du bon d'achat:", error);
+      alert("Une erreur est survenue lors de l'enregistrement");
+    }
   };
 
   const handleClose = () => {
@@ -400,6 +479,7 @@ const BonAchatDialog = ({
                 onChange={handleChange}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                readOnly={isEditing}
               />
             </div>
 
@@ -432,7 +512,10 @@ const BonAchatDialog = ({
               >
                 <option value="">Sélectionner un fournisseur</option>
                 {fournisseurs.map((fournisseur) => (
-                  <option key={fournisseur.id} value={fournisseur.id}>
+                  <option
+                    key={fournisseur._id || fournisseur.id}
+                    value={fournisseur._id || fournisseur.id}
+                  >
                     {fournisseur.nom}
                   </option>
                 ))}
@@ -506,7 +589,7 @@ const BonAchatDialog = ({
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                     {filteredProduits.slice(0, 5).map((produit) => (
                       <div
-                        key={produit.id}
+                        key={produit._id || produit.id}
                         onClick={() => handleAddProduit(produit)}
                         className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
                       >

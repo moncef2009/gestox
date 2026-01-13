@@ -25,6 +25,11 @@ import {
   NavigateNext,
   Print,
   Download,
+  ArrowUpward,
+  ArrowDownward,
+  Clear,
+  CheckCircle,
+  Warning,
 } from "@mui/icons-material";
 import ClientDialog from "../components/ClientDialog";
 import DirectPrintInvoice from "../components/DirectPrintInvoice";
@@ -34,6 +39,7 @@ const ProformaInvoice = () => {
   const [invoices, setInvoices] = useState([]);
   const [openInvoiceDialog, setOpenInvoiceDialog] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
+  const [actionMessage, setActionMessage] = useState("");
 
   // États pour le formulaire de facture
   const [form, setForm] = useState({
@@ -90,29 +96,28 @@ const ProformaInvoice = () => {
   );
   const totalTTC = form.items.reduce((sum, item) => sum + item.ttc, 0);
 
-  // Charger les données depuis le localStorage
+  // Charger les données depuis NeDB
   useEffect(() => {
-    const savedInvoices = localStorage.getItem("proformaInvoices");
-    const savedClients = localStorage.getItem("clients");
-    const savedProducts = localStorage.getItem("products");
-
-    if (savedInvoices) {
-      setInvoices(JSON.parse(savedInvoices));
-    }
-
-    if (savedClients) {
-      setClients(JSON.parse(savedClients));
-    }
-
-    if (savedProducts) {
-      setProducts(JSON.parse(savedProducts));
-    }
+    loadData();
   }, []);
 
-  // Sauvegarder les factures
-  useEffect(() => {
-    localStorage.setItem("proformaInvoices", JSON.stringify(invoices));
-  }, [invoices]);
+  const loadData = async () => {
+    try {
+      const [invoicesData, clientsData, productsData] = await Promise.all([
+        window.db.getProformas(),
+        window.db.getClients(),
+        window.db.getProducts(),
+      ]);
+
+      setInvoices(invoicesData);
+      setClients(clientsData);
+      setProducts(productsData);
+    } catch (error) {
+      console.error("Erreur lors du chargement des données:", error);
+      setActionMessage("Erreur lors du chargement des données");
+      setTimeout(() => setActionMessage(""), 3000);
+    }
+  };
 
   // Filtrer les clients
   useEffect(() => {
@@ -121,8 +126,8 @@ const ProformaInvoice = () => {
     } else {
       const filtered = clients.filter(
         (client) =>
-          client.nom.toLowerCase().includes(clientSearch.toLowerCase()) ||
-          client.telephone.includes(clientSearch) ||
+          client.nom?.toLowerCase().includes(clientSearch.toLowerCase()) ||
+          client.telephone?.includes(clientSearch) ||
           (client.address &&
             client.address.toLowerCase().includes(clientSearch.toLowerCase()))
       );
@@ -137,7 +142,7 @@ const ProformaInvoice = () => {
     } else {
       const filtered = products.filter(
         (product) =>
-          product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+          product.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
           (product.category &&
             product.category
               .toLowerCase()
@@ -224,7 +229,7 @@ const ProformaInvoice = () => {
   };
 
   // Ouvrir le dialog pour éditer une facture
-  const handleOpenEditInvoice = (invoice) => {
+  const handleOpenEditInvoice = async (invoice) => {
     setEditingInvoice(invoice);
     setForm(invoice);
     setSelectedClient(invoice.client);
@@ -290,15 +295,12 @@ const ProformaInvoice = () => {
         id: Date.now(),
         productId: product.id,
         productName: product.name,
-        // Prix par défaut : détail
         unitPrice: product.sellingPriceRetail,
-        // Stocker les deux prix distincts
         retailPrice: product.sellingPriceRetail,
         wholesalePrice: product.sellingPriceWholesale,
         quantity: 1,
         priceType: "retail", // "retail" ou "wholesale"
         tva: product.tva || 19,
-        // Calcul initial
         ht: product.sellingPriceRetail,
         ttc: product.sellingPriceRetail * (1 + (product.tva || 19) / 100),
       };
@@ -322,7 +324,6 @@ const ProformaInvoice = () => {
     if (!product) return;
 
     if (field === "quantity") {
-      // Mettre à jour seulement la quantité
       const quantity = parseFloat(value) || 1;
       const unitPrice =
         currentItem.priceType === "retail"
@@ -337,7 +338,6 @@ const ProformaInvoice = () => {
         ttc: quantity * unitPrice * (1 + currentItem.tva / 100),
       };
     } else if (field === "priceType") {
-      // Changer entre détail et gros
       const priceType = value;
       const unitPrice =
         priceType === "retail"
@@ -389,14 +389,16 @@ const ProformaInvoice = () => {
   };
 
   // Sauvegarder la facture
-  const handleSaveInvoice = () => {
+  const handleSaveInvoice = async () => {
     if (!selectedClient) {
-      alert("Veuillez sélectionner un client");
+      setActionMessage("Veuillez sélectionner un client");
+      setTimeout(() => setActionMessage(""), 3000);
       return;
     }
 
     if (form.items.length === 0) {
-      alert("Veuillez ajouter au moins un produit");
+      setActionMessage("Veuillez ajouter au moins un produit");
+      setTimeout(() => setActionMessage(""), 3000);
       return;
     }
 
@@ -404,56 +406,88 @@ const ProformaInvoice = () => {
     if (!form.invoiceNumber || form.invoiceNumber.trim() === "") {
       const newInvoiceNumber = getNextInvoiceNumber();
       setForm((prev) => ({ ...prev, invoiceNumber: newInvoiceNumber }));
-
-      // Attendre un tick pour que le state soit mis à jour
-      setTimeout(() => {
-        saveInvoiceWithNumber(newInvoiceNumber);
-      }, 0);
+      await saveInvoiceWithNumber(newInvoiceNumber);
       return;
     }
 
-    saveInvoiceWithNumber(form.invoiceNumber);
+    await saveInvoiceWithNumber(form.invoiceNumber);
   };
 
   // Fonction helper pour sauvegarder avec le numéro
-  const saveInvoiceWithNumber = (invoiceNumber) => {
-    const invoiceData = {
-      ...form,
-      invoiceNumber: invoiceNumber,
-      id: editingInvoice ? editingInvoice.id : Date.now(),
-      client: selectedClient,
-      totalHT,
-      totalTVA,
-      totalTTC,
-      createdAt: editingInvoice
-        ? editingInvoice.createdAt
-        : new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  const saveInvoiceWithNumber = async (invoiceNumber) => {
+    try {
+      const invoiceData = {
+        ...form,
+        invoiceNumber: invoiceNumber,
+        client: selectedClient,
+        totalHT,
+        totalTVA,
+        totalTTC,
+        createdAt: editingInvoice
+          ? editingInvoice.createdAt
+          : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
-    if (editingInvoice) {
-      // Mettre à jour la facture existante
-      setInvoices(
-        invoices.map((inv) =>
-          inv.id === editingInvoice.id ? invoiceData : inv
-        )
-      );
-    } else {
-      // Ajouter une nouvelle facture
-      setInvoices([...invoices, invoiceData]);
+      let savedInvoice;
+
+      if (editingInvoice) {
+        // Mettre à jour la facture existante dans NeDB
+        savedInvoice = await window.db.updateProforma(
+          editingInvoice._id || editingInvoice.id,
+          invoiceData
+        );
+
+        // Mettre à jour l'état local
+        setInvoices(
+          invoices.map((inv) =>
+            (inv._id || inv.id) === (editingInvoice._id || editingInvoice.id)
+              ? { ...invoiceData, _id: editingInvoice._id || editingInvoice.id }
+              : inv
+          )
+        );
+        setActionMessage("Facture modifiée avec succès");
+      } else {
+        // Ajouter une nouvelle facture dans NeDB
+        savedInvoice = await window.db.addProforma(invoiceData);
+
+        // Mettre à jour l'état local avec l'ID retourné par NeDB
+        setInvoices([...invoices, savedInvoice]);
+        setActionMessage("Facture créée avec succès");
+      }
+
+      setTimeout(() => setActionMessage(""), 3000);
+      handleCloseDialog();
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde de la facture:", error);
+      setActionMessage("Erreur lors de la sauvegarde de la facture");
+      setTimeout(() => setActionMessage(""), 3000);
     }
-
-    handleCloseDialog();
   };
 
   // Supprimer une facture
-  const handleDeleteInvoice = (id) => {
+  const handleDeleteInvoice = async (invoice) => {
     if (
       window.confirm(
-        "Êtes-vous sûr de vouloir supprimer cette facture proforma ?"
+        `Êtes-vous sûr de vouloir supprimer la facture proforma ${invoice.invoiceNumber} ?`
       )
     ) {
-      setInvoices(invoices.filter((inv) => inv.id !== id));
+      try {
+        // Supprimer de NeDB
+        await window.db.deleteProforma(invoice._id || invoice.id);
+
+        // Mettre à jour l'état local
+        setInvoices(invoices.filter((inv) => 
+          (inv._id || inv.id) !== (invoice._id || invoice.id)
+        ));
+
+        setActionMessage(`Facture ${invoice.invoiceNumber} supprimée avec succès`);
+        setTimeout(() => setActionMessage(""), 3000);
+      } catch (error) {
+        console.error("Erreur lors de la suppression de la facture:", error);
+        setActionMessage("Erreur lors de la suppression de la facture");
+        setTimeout(() => setActionMessage(""), 3000);
+      }
     }
   };
 
@@ -543,10 +577,9 @@ const ProformaInvoice = () => {
 
   // Nouvelle fonction pour l'impression directe
   const handleDirectPrint = (invoice) => {
-    // Préparer les données pour l'impression directe
     const invoiceData = {
       ...invoice,
-      items: invoice.items.map((item) => ({
+      items: invoice.items?.map((item) => ({
         productName: item.productName,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
@@ -554,7 +587,7 @@ const ProformaInvoice = () => {
         tva: item.tva || 19,
         ht: item.ht,
         ttc: item.ttc,
-      })),
+      })) || [],
       dueDate: invoice.date || new Date().toISOString().split("T")[0],
       companyInfo: invoice.companyInfo || {
         name: "Votre Entreprise SARL",
@@ -566,9 +599,11 @@ const ProformaInvoice = () => {
         nif: "NIF 987654321",
         nis: "NIS 456789123",
       },
+      totalHT: invoice.totalHT || 0,
+      totalTVA: invoice.totalTVA || 0,
+      totalTTC: invoice.totalTTC || 0,
     };
 
-    // Lancer l'impression directe
     setDirectPrintInvoice(invoiceData);
   };
 
@@ -584,17 +619,17 @@ const ProformaInvoice = () => {
 
   // Filtrer et trier les factures
   const filteredAndSortedInvoices = invoices
-    .filter(
-      (invoice) =>
-        invoice.invoiceNumber
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
+    .filter((invoice) => {
+      const searchLower = searchTerm.toLowerCase();
+      return (
+        invoice.invoiceNumber?.toLowerCase().includes(searchLower) ||
         (invoice.client &&
-          invoice.client.nom
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())) ||
-        invoice.totalTTC.toString().includes(searchTerm)
-    )
+          invoice.client.nom?.toLowerCase().includes(searchLower)) ||
+        (invoice.client &&
+          invoice.client.telephone?.includes(searchTerm)) ||
+        invoice.totalTTC?.toString().includes(searchTerm)
+      );
+    })
     .sort((a, b) => {
       let aValue = a[sortField];
       let bValue = b[sortField];
@@ -635,6 +670,7 @@ const ProformaInvoice = () => {
   const handlePageChange = (pageNumber) => {
     if (pageNumber >= 1 && pageNumber <= totalPages) {
       setCurrentPage(pageNumber);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -656,7 +692,7 @@ const ProformaInvoice = () => {
     }
 
     return (
-      <div className="flex flex-col sm:flex-row items-center justify-between mt-6 px-4 py-3 bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row items-center justify-between mt-4 px-4 py-3 bg-white rounded-lg border border-gray-200">
         <div className="text-sm text-gray-700 mb-3 sm:mb-0">
           Affichage de{" "}
           <span className="font-semibold">{indexOfFirstInvoice + 1}</span> à{" "}
@@ -688,18 +724,6 @@ const ProformaInvoice = () => {
             <NavigateBefore className="w-5 h-5" />
           </button>
 
-          {startPage > 1 && (
-            <>
-              <button
-                onClick={() => handlePageChange(1)}
-                className="px-3 py-1 rounded-lg text-sm font-medium hover:bg-gray-100"
-              >
-                1
-              </button>
-              {startPage > 2 && <span className="px-2">...</span>}
-            </>
-          )}
-
           {pageNumbers.map((number) => (
             <button
               key={number}
@@ -713,18 +737,6 @@ const ProformaInvoice = () => {
               {number}
             </button>
           ))}
-
-          {endPage < totalPages && (
-            <>
-              {endPage < totalPages - 1 && <span className="px-2">...</span>}
-              <button
-                onClick={() => handlePageChange(totalPages)}
-                className="px-3 py-1 rounded-lg text-sm font-medium hover:bg-gray-100"
-              >
-                {totalPages}
-              </button>
-            </>
-          )}
 
           <button
             onClick={() => handlePageChange(currentPage + 1)}
@@ -747,247 +759,452 @@ const ProformaInvoice = () => {
     );
   };
 
+  // Statistiques
+  const stats = {
+    total: invoices.length,
+    totalTTC: invoices.reduce((sum, inv) => sum + (inv.totalTTC || 0), 0),
+    totalHT: invoices.reduce((sum, inv) => sum + (inv.totalHT || 0), 0),
+    totalTVA: invoices.reduce((sum, inv) => sum + (inv.totalTVA || 0), 0),
+    averageTTC:
+      invoices.length > 0
+        ? invoices.reduce((sum, inv) => sum + (inv.totalTTC || 0), 0) /
+          invoices.length
+        : 0,
+    thisMonth: invoices.filter(
+      (inv) =>
+        new Date(inv.date || inv.createdAt).getMonth() ===
+          new Date().getMonth() &&
+        new Date(inv.date || inv.createdAt).getFullYear() ===
+          new Date().getFullYear()
+    ).length,
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-lg border-b border-gray-200">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl shadow-lg">
-                  <Receipt className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">
-                    Factures Proforma
-                  </h1>
-                  <p className="text-xs text-gray-600 hidden sm:block">
-                    Créez et gérez vos factures proforma
-                  </p>
-                </div>
-              </div>
+      <header className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-lg shadow">
+              <Receipt className="w-6 h-6 text-white" />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleOpenNewInvoice}
-                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl hover:from-purple-700 hover:to-indigo-800 transition-all duration-300 flex items-center gap-2 text-sm"
-              >
-                <Add />
-                <span className="hidden sm:inline">Nouvelle Facture</span>
-              </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Factures Proforma
+              </h1>
+              <p className="text-sm text-gray-600">
+                Créez et gérez vos factures proforma
+              </p>
             </div>
           </div>
-        </div>
-      </header>
 
-      <div className="container mx-auto px-4 py-6">
+          <div className="flex gap-2">
+            <button
+              onClick={handleOpenNewInvoice}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-700 text-white rounded-lg hover:shadow flex items-center gap-2"
+            >
+              <Add className="w-4 h-4" />
+              <span className="hidden sm:inline">Nouvelle Facture</span>
+            </button>
+          </div>
+        </div>
+
         {/* Barre de recherche */}
-        <div className="mb-6">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Search className="w-5 h-5 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              placeholder="Rechercher une facture par numéro, client ou montant..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none transition-all"
-            />
+        <div className="relative mb-4">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="w-5 h-5 text-gray-400" />
           </div>
-        </div>
-
-        {/* Liste des factures en tableau */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Receipt className="w-5 h-5" />
-              Factures ({filteredAndSortedInvoices.length})
-              <span className="text-sm font-normal text-gray-500 ml-2">
-                (Page {currentPage} sur {totalPages})
-              </span>
-            </h2>
-          </div>
-
-          {invoices.length === 0 ? (
-            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-8 text-center">
-              <div className="text-5xl mb-4">📄</div>
-              <h3 className="text-lg font-semibold text-purple-900 mb-2">
-                Aucune facture proforma
-              </h3>
-              <p className="text-purple-700 mb-4">
-                Créez votre première facture proforma !
-              </p>
-              <button
-                onClick={handleOpenNewInvoice}
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl hover:from-purple-700 hover:to-indigo-800 transition-all duration-300 flex items-center gap-2 mx-auto"
-              >
-                <Add />
-                Créer une facture
-              </button>
-            </div>
-          ) : filteredAndSortedInvoices.length === 0 ? (
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-8 text-center">
-              <div className="text-5xl mb-4">🔍</div>
-              <h3 className="text-lg font-semibold text-amber-900 mb-2">
-                Aucun résultat trouvé
-              </h3>
-              <p className="text-amber-700">
-                Aucune facture ne correspond à votre recherche.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Tableau des factures */}
-              <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gradient-to-r from-purple-700 to-indigo-800">
-                      <tr>
-                        <th
-                          onClick={() => handleSort("invoiceNumber")}
-                          className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Numbers className="w-4 h-4" />
-                            N° Facture
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => handleSort("date")}
-                          className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <CalendarToday className="w-4 h-4" />
-                            Date
-                          </div>
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-white">
-                          <div className="flex items-center gap-2">
-                            <Person className="w-4 h-4" />
-                            Client
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => handleSort("totalHT")}
-                          className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            Total HT
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => handleSort("totalTVA")}
-                          className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">TVA</div>
-                        </th>
-                        <th
-                          onClick={() => handleSort("totalTTC")}
-                          className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            Total TTC
-                          </div>
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-white">
-                          Articles
-                        </th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-white">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
-                      {currentInvoices.map((invoice) => (
-                        <tr
-                          key={invoice.id}
-                          className="hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="px-6 py-4">
-                            <div className="font-medium text-gray-900">
-                              {invoice.invoiceNumber}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-gray-700">
-                              {new Date(invoice.date).toLocaleDateString(
-                                "fr-FR"
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <Person className="w-4 h-4 text-gray-400" />
-                              <div>
-                                <div className="font-medium text-gray-900">
-                                  {invoice.client?.nom || "Client non spécifié"}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {invoice.client?.telephone || ""}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-medium text-gray-900">
-                              {invoice.totalHT.toFixed(2)} DA
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-medium text-blue-600">
-                              {invoice.totalTVA.toFixed(2)} DA
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-bold text-purple-600">
-                              {invoice.totalTTC.toFixed(2)} DA
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-gray-700">
-                              {invoice.items?.length || 0} article(s)
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleOpenEditInvoice(invoice)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors"
-                                title="Modifier"
-                              >
-                                <Edit className="w-5 h-5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteInvoice(invoice.id)}
-                                className="p-2 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
-                                title="Supprimer"
-                              >
-                                <Delete className="w-5 h-5" />
-                              </button>
-                              <button
-                                onClick={() => handleDirectPrint(invoice)}
-                                className="p-2 text-green-600 hover:bg-green-50 border border-green-200 rounded-lg transition-colors"
-                                title="Imprimer directement"
-                              >
-                                <Print className="w-5 h-5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Pagination */}
-              <Pagination />
-            </>
+          <input
+            type="text"
+            placeholder="Rechercher une facture par numéro, client ou montant..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm("")}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center"
+            >
+              <Clear className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+            </button>
           )}
         </div>
+
+        {/* Message d'action */}
+        {actionMessage && (
+          <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <div className="flex items-center gap-2 text-emerald-800">
+              <CheckCircle className="w-4 h-4" />
+              {actionMessage}
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Statistiques */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Total Factures</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+            </div>
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Receipt className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-600">
+            {stats.thisMonth} ce mois-ci
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Total TTC</p>
+              <p className="text-2xl font-bold text-emerald-600">
+                {stats.totalTTC.toFixed(2)} DA
+              </p>
+            </div>
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <ShoppingCart className="w-6 h-6 text-emerald-600" />
+            </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-600">
+            Moyenne: {stats.averageTTC.toFixed(2)} DA
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Total HT</p>
+              <p className="text-2xl font-bold text-blue-600">
+                {stats.totalHT.toFixed(2)} DA
+              </p>
+            </div>
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Store className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-600">
+            Hors taxes
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Total TVA</p>
+              <p className="text-2xl font-bold text-amber-600">
+                {stats.totalTVA.toFixed(2)} DA
+              </p>
+            </div>
+            <div className="p-2 bg-amber-100 rounded-lg">
+              <Business className="w-6 h-6 text-amber-600" />
+            </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-600">
+            Taxe sur la valeur ajoutée
+          </div>
+        </div>
+      </div>
+
+      {/* Liste des factures */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Receipt className="w-5 h-5" />
+            Liste des Factures ({filteredAndSortedInvoices.length})
+          </h2>
+          <div className="text-sm text-gray-500 hidden lg:block">
+            Cliquez sur les en-têtes pour trier
+          </div>
+        </div>
+
+        {invoices.length === 0 ? (
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-8 text-center">
+            <div className="text-5xl mb-4">📄</div>
+            <h3 className="text-lg font-semibold text-purple-900 mb-2">
+              Aucune facture proforma
+            </h3>
+            <p className="text-purple-700 mb-4">
+              Créez votre première facture proforma !
+            </p>
+            <button
+              onClick={handleOpenNewInvoice}
+              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl hover:from-purple-700 hover:to-indigo-800 transition-all duration-300 flex items-center gap-2 mx-auto"
+            >
+              <Add />
+              Créer une facture
+            </button>
+          </div>
+        ) : filteredAndSortedInvoices.length === 0 ? (
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-8 text-center">
+            <div className="text-5xl mb-4">🔍</div>
+            <h3 className="text-lg font-semibold text-amber-900 mb-2">
+              Aucun résultat trouvé
+            </h3>
+            <p className="text-amber-700">
+              Aucune facture ne correspond à votre recherche.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Tableau des factures */}
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-4">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gradient-to-r from-purple-700 to-indigo-800">
+                    <tr>
+                      <th
+                        onClick={() => handleSort("invoiceNumber")}
+                        className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Numbers className="w-4 h-4" />
+                          N° Facture
+                          {sortField === "invoiceNumber" &&
+                            (sortDirection === "asc" ? (
+                              <ArrowUpward className="w-3 h-3" />
+                            ) : (
+                              <ArrowDownward className="w-3 h-3" />
+                            ))}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort("date")}
+                        className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <CalendarToday className="w-4 h-4" />
+                          Date
+                          {sortField === "date" &&
+                            (sortDirection === "asc" ? (
+                              <ArrowUpward className="w-3 h-3" />
+                            ) : (
+                              <ArrowDownward className="w-3 h-3" />
+                            ))}
+                        </div>
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-white">
+                        <div className="flex items-center gap-2">
+                          <Person className="w-4 h-4" />
+                          Client
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort("totalHT")}
+                        className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          Total HT
+                          {sortField === "totalHT" &&
+                            (sortDirection === "asc" ? (
+                              <ArrowUpward className="w-3 h-3" />
+                            ) : (
+                              <ArrowDownward className="w-3 h-3" />
+                            ))}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort("totalTVA")}
+                        className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          TVA
+                          {sortField === "totalTVA" &&
+                            (sortDirection === "asc" ? (
+                              <ArrowUpward className="w-3 h-3" />
+                            ) : (
+                              <ArrowDownward className="w-3 h-3" />
+                            ))}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort("totalTTC")}
+                        className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-purple-800 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          Total TTC
+                          {sortField === "totalTTC" &&
+                            (sortDirection === "asc" ? (
+                              <ArrowUpward className="w-3 h-3" />
+                            ) : (
+                              <ArrowDownward className="w-3 h-3" />
+                            ))}
+                        </div>
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-white">
+                        Articles
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-white">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {currentInvoices.map((invoice) => (
+                      <tr
+                        key={invoice._id || invoice.id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="font-mono font-bold text-gray-900">
+                            {invoice.invoiceNumber}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900">
+                            {new Date(invoice.date || invoice.createdAt).toLocaleDateString("fr-FR")}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <Person className="w-4 h-4 text-gray-400" />
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {invoice.client?.nom || "Client non spécifié"}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {invoice.client?.telephone || ""}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-gray-900">
+                            {invoice.totalHT?.toFixed(2) || "0.00"} DA
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-blue-600">
+                            {invoice.totalTVA?.toFixed(2) || "0.00"} DA
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-purple-600">
+                            {invoice.totalTTC?.toFixed(2) || "0.00"} DA
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-gray-700">
+                            {invoice.items?.length || 0} article(s)
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleOpenEditInvoice(invoice)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors"
+                              title="Modifier"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDirectPrint(invoice)}
+                              className="p-2 text-green-600 hover:bg-green-50 border border-green-200 rounded-lg transition-colors"
+                              title="Imprimer"
+                            >
+                              <Print className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteInvoice(invoice)}
+                              className="p-2 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
+                              title="Supprimer"
+                            >
+                              <Delete className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Vue mobile - Cards */}
+            <div className="lg:hidden space-y-4 mb-4">
+              {currentInvoices.map((invoice) => (
+                <div
+                  key={invoice._id || invoice.id}
+                  className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-lg">
+                          {invoice.invoiceNumber}
+                        </h3>
+                        <div className="text-sm text-gray-600 mt-1">
+                          {new Date(invoice.date || invoice.createdAt).toLocaleDateString("fr-FR")}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Person className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm text-gray-700">
+                            {invoice.client?.nom || "Client non spécifié"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleOpenEditInvoice(invoice)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDirectPrint(invoice)}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                        >
+                          <Print className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteInvoice(invoice)}
+                          className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"
+                        >
+                          <Delete className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 pt-3 border-t border-gray-200">
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600">HT</div>
+                        <div className="font-medium text-gray-900">
+                          {invoice.totalHT?.toFixed(2) || "0.00"} DA
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600">TVA</div>
+                        <div className="font-medium text-blue-600">
+                          {invoice.totalTVA?.toFixed(2) || "0.00"} DA
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600">TTC</div>
+                        <div className="font-bold text-purple-600">
+                          {invoice.totalTTC?.toFixed(2) || "0.00"} DA
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-gray-200">
+                      <div className="text-sm text-gray-600">
+                        Articles: {invoice.items?.length || 0}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            <Pagination />
+          </>
+        )}
       </div>
 
       {/* Dialog de création/édition de facture */}
@@ -1109,7 +1326,7 @@ const ProformaInvoice = () => {
                     value={form.invoiceNumber}
                     onChange={handleChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
-                    readOnly={!editingInvoice} // Lecture seule si nouvelle facture
+                    readOnly={!editingInvoice}
                     title={!editingInvoice ? "Généré automatiquement" : ""}
                   />
                   {!editingInvoice && (
@@ -1192,10 +1409,10 @@ const ProformaInvoice = () => {
                               <span>NIF: {selectedClient.n_if}</span>
                             </div>
                           )}
-                          {selectedClient.n_is && ( // Changé de n_ic à n_is
+                          {selectedClient.n_is && (
                             <div className="flex items-center gap-2">
                               <Business className="w-4 h-4 text-gray-400" />
-                              <span>NIS: {selectedClient.n_is}</span>{" "}
+                              <span>NIS: {selectedClient.n_is}</span>
                             </div>
                           )}
                         </div>
@@ -1236,7 +1453,7 @@ const ProformaInvoice = () => {
                       ) : (
                         filteredClients.map((client) => (
                           <button
-                            key={client.id}
+                            key={client._id || client.id}
                             onClick={() => handleSelectClient(client)}
                             className="w-full text-left p-3 hover:bg-gray-50 flex items-center justify-between border-b border-gray-100 last:border-b-0"
                           >
@@ -1249,14 +1466,11 @@ const ProformaInvoice = () => {
                                 {client.address && (
                                   <div>Adresse: {client.address}</div>
                                 )}
-                                {(client.n_rc ||
-                                  client.n_if ||
-                                  client.n_is) && ( // Changé de n_ic à n_is
+                                {(client.n_rc || client.n_if || client.n_is) && (
                                   <div className="text-xs text-gray-500 mt-1">
                                     {client.n_rc && `RC: ${client.n_rc}`}
                                     {client.n_if && `, NIF: ${client.n_if}`}
-                                    {client.n_is &&
-                                      `, NIS: ${client.n_is}`}{" "}
+                                    {client.n_is && `, NIS: ${client.n_is}`}
                                   </div>
                                 )}
                               </div>
@@ -1322,7 +1536,7 @@ const ProformaInvoice = () => {
                       <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg bg-white">
                         {filteredProducts.map((product) => (
                           <div
-                            key={product.id}
+                            key={product._id || product.id}
                             className="p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                           >
                             <div className="flex items-center justify-between">
@@ -1337,15 +1551,14 @@ const ProformaInvoice = () => {
                                       <span className="font-medium">
                                         Détail:
                                       </span>{" "}
-                                      {product.sellingPriceRetail.toFixed(2)} DA
+                                      {product.sellingPriceRetail?.toFixed(2) || "0.00"} DA
                                     </span>
                                     <span className="flex items-center gap-1">
                                       <Store className="w-3 h-3" />
                                       <span className="font-medium">
                                         Gros:
                                       </span>{" "}
-                                      {product.sellingPriceWholesale.toFixed(2)}{" "}
-                                      DA
+                                      {product.sellingPriceWholesale?.toFixed(2) || "0.00"} DA
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-4">
@@ -1357,7 +1570,7 @@ const ProformaInvoice = () => {
                                       <span className="font-medium">
                                         Stock:
                                       </span>{" "}
-                                      {product.currentQuantity}
+                                      {product.currentQuantity?.toFixed(2) || "0.00"}
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -1464,7 +1677,7 @@ const ProformaInvoice = () => {
                               </td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-gray-900">
-                                  {item.unitPrice.toFixed(2)} DA
+                                  {item.unitPrice?.toFixed(2) || "0.00"} DA
                                 </div>
                                 <div className="text-xs text-gray-500 flex items-center gap-1">
                                   {item.priceType === "retail" ? (
@@ -1522,19 +1735,19 @@ const ProformaInvoice = () => {
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <div className="text-gray-900">{item.tva}%</div>
+                                <div className="text-gray-900">{item.tva || 19}%</div>
                                 <div className="text-xs text-gray-500">
                                   Fixe
                                 </div>
                               </td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-gray-900">
-                                  {item.ht.toFixed(2)} DA
+                                  {item.ht?.toFixed(2) || "0.00"} DA
                                 </div>
                               </td>
                               <td className="px-4 py-3">
                                 <div className="font-bold text-purple-600">
-                                  {item.ttc.toFixed(2)} DA
+                                  {item.ttc?.toFixed(2) || "0.00"} DA
                                 </div>
                               </td>
                               <td className="px-4 py-3">
@@ -1628,14 +1841,20 @@ const ProformaInvoice = () => {
       <ClientDialog
         open={showClientDialog}
         onClose={() => setShowClientDialog(false)}
-        onClientSaved={(clientData, action) => {
+        onClientSaved={async (clientData, action) => {
           if (action === "add") {
-            const updatedClients = [...clients, clientData];
-            setClients(updatedClients);
-            localStorage.setItem("clients", JSON.stringify(updatedClients));
+            try {
+              const savedClient = await window.db.addClient(clientData);
+              const updatedClients = [...clients, savedClient];
+              setClients(updatedClients);
 
-            // Sélectionner automatiquement le nouveau client
-            handleSelectClient(clientData);
+              // Sélectionner automatiquement le nouveau client
+              handleSelectClient(savedClient);
+            } catch (error) {
+              console.error("Erreur lors de l'ajout du client:", error);
+              setActionMessage("Erreur lors de l'ajout du client");
+              setTimeout(() => setActionMessage(""), 3000);
+            }
           }
           setShowClientDialog(false);
         }}
