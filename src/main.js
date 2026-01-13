@@ -87,44 +87,72 @@ async function printTicket(ticketContent) {
       const escpos = {
         INIT: Buffer.from([0x1b, 0x40]),
         ALIGN_LEFT: Buffer.from([0x1b, 0x61, 0x00]),
+        ALIGN_CENTER: Buffer.from([0x1b, 0x61, 0x01]),
         ALIGN_RIGHT: Buffer.from([0x1b, 0x61, 0x02]),
         FEED_LINES: (n) => Buffer.from([0x1b, 0x64, n]),
         CUT: Buffer.from([0x1d, 0x56, 0x00]),
+        BOLD_ON: Buffer.from([0x1b, 0x45, 0x01]),
+        BOLD_OFF: Buffer.from([0x1b, 0x45, 0x00]),
       };
 
       // =======================
-      // Ticket MINIMAL
+      // Construction du ticket 80mm
       // =======================
-      const ticket = Buffer.concat([
+      const separator = "****************************************\n";
+      const line = "----------------------------------------\n";
+      
+      // En-tête
+      const header = Buffer.concat([
         escpos.INIT,
+        escpos.ALIGN_CENTER,
+        escpos.BOLD_ON,
+        Buffer.from(separator, "ascii"),
+        Buffer.from("            TICKET DE CAISSE\n", "ascii"),
+        Buffer.from(separator, "ascii"),
+        escpos.BOLD_OFF,
+      ]);
+
+      // Informations du ticket
+      const ticketInfo = Buffer.concat([
         escpos.ALIGN_LEFT,
+        Buffer.from(`Date: ${ticketContent.date || new Date().toLocaleString()}\n`, "ascii"),
+        Buffer.from(`Ticket: ${ticketContent.ticketNumber || "N/A"}\n`, "ascii"),
+        Buffer.from(line, "ascii"),
+      ]);
 
-        Buffer.from(`Date: ${new Date().toLocaleString()}\n`, "ascii"),
-        Buffer.from(`Ticket: ${ticketContent.ticketNumber}\n`, "ascii"),
-        Buffer.from("-".repeat(32) + "\n", "ascii"),
+      // Articles
+      const items = ticketContent.items ? ticketContent.items.flatMap((item) => [
+        Buffer.from(
+          `${(item.name || "").substring(0, 20)} : ${item.quantity || 0} x ${(item.unitPrice || 0).toFixed(2)} = ${(item.subtotal || 0).toFixed(2)} DA\n`,
+          "ascii"
+        ),
+      ]) : [];
 
-        ...ticketContent.items.flatMap((item) => [
-          Buffer.from(`${item.name.substring(0, 20)}\n`, "ascii"),
-          Buffer.from(
-            `${item.quantity} x ${item.unitPrice.toFixed(2)} = ${item.subtotal.toFixed(2)} DA\n`,
-            "ascii"
-          ),
-        ]),
-
-        Buffer.from("-".repeat(32) + "\n", "ascii"),
-
+      // Total et paiement
+      const footer = Buffer.concat([
+        Buffer.from(line, "ascii"),
         escpos.ALIGN_RIGHT,
-        Buffer.from(`TOTAL : ${ticketContent.total.toFixed(2)} DA\n`, "ascii"),
+        Buffer.from(`TOTAL : ${(ticketContent.total || 0).toFixed(2)} DA\n`, "ascii"),
         Buffer.from(
-          `PAYÉ  : ${ticketContent.payedAmount.toFixed(2)} DA\n`,
+          `PAYE  : ${(ticketContent.payedAmount || 0).toFixed(2)} DA\n`,
           "ascii"
         ),
         Buffer.from(
-          `RESTE : ${ticketContent.remainingAmount.toFixed(2)} DA\n`,
+          `RESTE : ${(ticketContent.remainingAmount || 0).toFixed(2)} DA\n`,
           "ascii"
         ),
+        Buffer.from("\n", "ascii"),
+        escpos.ALIGN_CENTER,
+        Buffer.from(separator, "ascii"),
+      ]);
 
-        escpos.FEED_LINES(2),
+      // Assemblage final
+      const ticket = Buffer.concat([
+        header,
+        ticketInfo,
+        ...items,
+        footer,
+        escpos.FEED_LINES(3),
         escpos.CUT,
       ]);
 

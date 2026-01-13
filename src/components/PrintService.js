@@ -3,31 +3,12 @@ import { useState } from "react";
 
 const usePrintService = () => {
   const [isPrinting, setIsPrinting] = useState(false);
-  const [printStatus, setPrintStatus] = useState(null);
 
   // Fonction pour imprimer un ticket
   const printSaleTicket = async (saleData) => {
     setIsPrinting(true);
-    setPrintStatus({ type: "info", message: "Impression en cours..." });
 
     try {
-      // Vérifier si l'imprimante est connectée
-      const printerCheck = await window.printer.checkPrinter();
-
-      if (!printerCheck.connected) {
-        setPrintStatus({
-          type: "warning",
-          message:
-            "Imprimante non connectée. Vente enregistrée sans impression.",
-        });
-        setIsPrinting(false);
-        return {
-          success: true,
-          printed: false,
-          warning: "Imprimante non connectée",
-        };
-      }
-
       // Préparer les données pour l'impression
       const ticketNumber = `T${Date.now().toString().slice(-6)}`;
 
@@ -53,45 +34,27 @@ const usePrintService = () => {
         status: saleData.status,
       };
 
-      // Appeler l'impression
+      // Appeler l'impression sans vérification préalable
       const result = await window.printer.printTicket(ticketContent);
 
-      if (result.success) {
-        setPrintStatus({
-          type: "success",
-          message: "Ticket imprimé avec succès",
-        });
-        return { success: true, printed: true };
-      } else {
-        setPrintStatus({
-          type: "warning",
-          message: `Vente enregistrée mais impression échouée: ${result.error}`,
-        });
-        return {
-          success: true,
-          printed: false,
-          error: result.error,
-        };
-      }
+      return {
+        success: true,
+        printed: result.success || false,
+        error: result.error || null,
+      };
     } catch (error) {
       console.error("Erreur lors de l'impression:", error);
-      setPrintStatus({
-        type: "error",
-        message: `Erreur lors de l'impression: ${error.message || error}`,
-      });
       return {
-        success: false,
+        success: true, // La vente est toujours enregistrée
         printed: false,
         error: error.message || error,
       };
     } finally {
       setIsPrinting(false);
-      // Effacer le message après 5 secondes
-      setTimeout(() => setPrintStatus(null), 5000);
     }
   };
 
-  // Tester la connexion de l'imprimante
+  // Fonction simplifiée pour tester l'imprimante (optionnelle)
   const testPrinterConnection = async () => {
     try {
       const result = await window.printer.checkPrinter();
@@ -104,7 +67,6 @@ const usePrintService = () => {
 
   return {
     isPrinting,
-    printStatus,
     printSaleTicket,
     testPrinterConnection,
   };

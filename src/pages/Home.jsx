@@ -21,8 +21,10 @@ import {
   Payment,
   TrendingUp,
   Info,
+  Print,
 } from "@mui/icons-material";
 import ClientDialog from "../components/ClientDialog";
+import usePrintService from "../components/PrintService";
 
 const SalePage = () => {
   const [addedToSale, setAddedToSale] = useState([]);
@@ -49,6 +51,10 @@ const SalePage = () => {
   const productsPerPage = 4;
 
   const scanTimeoutRef = useRef(null);
+
+  // Service d'impression
+  const { isPrinting, printSaleTicket, testPrinterConnection } =
+    usePrintService();
 
   useEffect(() => {
     loadProducts();
@@ -619,12 +625,11 @@ const SalePage = () => {
         }
       }
 
-      // Recharger les produits pour refléter les nouvelles quantités
-      await loadProducts();
+      // IMPRIMER LE TICKET (silencieusement)
+      await printSaleTicket(sale);
 
-      setSaleMessage(
-        `Vente enregistrée avec succès ! Total: ${total.toFixed(2)} DA`
-      );
+      // Message simple de confirmation
+      setSaleMessage(`Vente enregistrée ! Total: ${total.toFixed(2)} DA`);
 
       setAddedToSale([]);
       setSaleForm({
@@ -635,7 +640,7 @@ const SalePage = () => {
 
       handleCloseDialog();
 
-      setTimeout(() => setSaleMessage(""), 3000);
+      setTimeout(() => setSaleMessage(""), 4000);
     } catch (error) {
       console.error("Erreur lors de l'enregistrement de la vente:", error);
       setSaleMessage("Erreur lors de l'enregistrement de la vente");
@@ -697,8 +702,8 @@ const SalePage = () => {
         }
       }
 
-      // Recharger les produits
-      await loadProducts();
+      // IMPRIMER LE TICKET (silencieusement)
+      await printSaleTicket(sale);
 
       setSaleMessage(
         `Vente rapide enregistrée ! Total: ${total.toFixed(2)} DA`
@@ -759,7 +764,7 @@ const SalePage = () => {
   };
 
   return (
-    <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen relative">
       {/* En-tête */}
       <div className="mb-2">
         <div className="flex items-center justify-between mb-2">
@@ -767,7 +772,9 @@ const SalePage = () => {
             <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow">
               <ShoppingCart className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Caisse</h1>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Caisse</h1>
+            </div>
           </div>
           <div className="text-right">
             <div className="text-6xl font-bold text-emerald-600">
@@ -1036,8 +1043,6 @@ const SalePage = () => {
                             </div>
                           </td>
                           <td className="py-3 px-2">
-                            {" "}
-                            {/* Nouvelle cellule pour l'unité */}
                             <div className="text-sm text-gray-600">
                               {item.unit || "Unité"}
                             </div>
@@ -1461,10 +1466,20 @@ const SalePage = () => {
                 </button>
                 <button
                   onClick={handleSaveSale}
-                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white text-sm font-medium rounded-lg hover:shadow flex items-center gap-1"
+                  disabled={isPrinting}
+                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white text-sm font-medium rounded-lg hover:shadow flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" />
-                  Confirmer
+                  {isPrinting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Impression...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Confirmer
+                    </>
+                  )}
                 </button>
               </div>
             </div>
