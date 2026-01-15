@@ -700,7 +700,7 @@ const DirectPrintInvoice = ({ invoiceData, onClose, invoiceType }) => {
             
             <!-- MONTANT EN LETTRES -->
             <div class="amount-in-words">
-              <div class="amount-label">Montant en lettres :</div>
+              <div class="amount-label">Arrêtée la présente facture à la somme de :</div>
               <div class="amount-text">${numberToWords(invoice.totalTTC)}</div>
             </div>
             
