@@ -41,6 +41,17 @@ const ProformaInvoice = () => {
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [actionMessage, setActionMessage] = useState("");
 
+  // Informations de l'entreprise chargées depuis la base de données
+  const [companyInfo, setCompanyInfo] = useState({
+    name: "Votre Entreprise SARL",
+    address: "123 Rue Principale, Ville, Pays",
+    phone: "+213 XX XX XX XX",
+    email: "contact@entreprise.dz",
+    rc: "RC 123456789",
+    nif: "NIF 987654321",
+    nis: "NIS 456789123",
+  });
+
   // États pour le formulaire de facture
   const [form, setForm] = useState({
     invoiceNumber: "",
@@ -99,7 +110,42 @@ const ProformaInvoice = () => {
   // Charger les données depuis NeDB
   useEffect(() => {
     loadData();
+    loadCompanyInfo();
   }, []);
+
+  const loadCompanyInfo = async () => {
+    try {
+      const companies = await window.db.getCompanies();
+      // Trouver l'entreprise courante
+      let currentCompany = companies.find((c) => c.isCurrent === true);
+
+      if (!currentCompany && companies.length > 0) {
+        currentCompany = companies[0];
+      }
+
+      if (currentCompany) {
+        const updatedCompanyInfo = {
+          name: currentCompany.name || "Votre Entreprise SARL",
+          address: currentCompany.address || "123 Rue Principale, Ville, Pays",
+          phone: currentCompany.phone || "+213 XX XX XX XX",
+          email: currentCompany.email || "contact@entreprise.dz",
+          rc: currentCompany.rc || "RC 123456789",
+          nif: currentCompany.nif || "NIF 987654321",
+          nis: currentCompany.nis || "NIS 456789123",
+        };
+
+        setCompanyInfo(updatedCompanyInfo);
+
+        // Mettre à jour le formulaire avec les informations de l'entreprise
+        setForm((prev) => ({
+          ...prev,
+          companyInfo: updatedCompanyInfo,
+        }));
+      }
+    } catch (error) {
+      console.error("Erreur lors du chargement de l'entreprise:", error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -213,15 +259,7 @@ const ProformaInvoice = () => {
       invoiceNumber: newInvoiceNumber, // Définir directement le numéro généré
       date: new Date().toISOString().split("T")[0],
       client: null,
-      companyInfo: {
-        name: "Votre Entreprise SARL",
-        address: "123 Rue Principale, Ville, Pays",
-        phone: "+213 XX XX XX XX",
-        email: "contact@entreprise.dz",
-        rc: "RC 123456789",
-        nif: "NIF 987654321",
-        nis: "NIS 456789123",
-      },
+      companyInfo: companyInfo, // Utiliser les informations de l'entreprise chargées
       items: [],
     });
     setSelectedClient(null);
@@ -477,11 +515,15 @@ const ProformaInvoice = () => {
         await window.db.deleteProforma(invoice._id || invoice.id);
 
         // Mettre à jour l'état local
-        setInvoices(invoices.filter((inv) => 
-          (inv._id || inv.id) !== (invoice._id || invoice.id)
-        ));
+        setInvoices(
+          invoices.filter(
+            (inv) => (inv._id || inv.id) !== (invoice._id || invoice.id)
+          )
+        );
 
-        setActionMessage(`Facture ${invoice.invoiceNumber} supprimée avec succès`);
+        setActionMessage(
+          `Facture ${invoice.invoiceNumber} supprimée avec succès`
+        );
         setTimeout(() => setActionMessage(""), 3000);
       } catch (error) {
         console.error("Erreur lors de la suppression de la facture:", error);
@@ -579,29 +621,18 @@ const ProformaInvoice = () => {
   const handleDirectPrint = (invoice) => {
     const invoiceData = {
       ...invoice,
-      items: invoice.items?.map((item) => ({
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        priceType: item.priceType || "retail",
-        tva: item.tva || 19,
-        ht: item.ht,
-        ttc: item.ttc,
-      })) || [],
+      items:
+        invoice.items?.map((item) => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          priceType: item.priceType || "retail",
+          tva: item.tva || 19,
+          ht: item.ht,
+          ttc: item.ttc,
+        })) || [],
       dueDate: invoice.date || new Date().toISOString().split("T")[0],
-      companyInfo: invoice.companyInfo || {
-        name: "Votre Entreprise SARL",
-        address: "123 Rue Principale, Ville, Pays",
-        city: "Ville",
-        phone: "+213 XX XX XX XX",
-        email: "contact@entreprise.dz",
-        rc: "RC 123456789",
-        nif: "NIF 987654321",
-        nis: "NIS 456789123",
-      },
-      totalHT: invoice.totalHT || 0,
-      totalTVA: invoice.totalTVA || 0,
-      totalTTC: invoice.totalTTC || 0,
+      companyInfo: invoice.companyInfo || companyInfo, // Utiliser companyInfo chargé
     };
 
     setDirectPrintInvoice(invoiceData);
@@ -625,8 +656,7 @@ const ProformaInvoice = () => {
         invoice.invoiceNumber?.toLowerCase().includes(searchLower) ||
         (invoice.client &&
           invoice.client.nom?.toLowerCase().includes(searchLower)) ||
-        (invoice.client &&
-          invoice.client.telephone?.includes(searchTerm)) ||
+        (invoice.client && invoice.client.telephone?.includes(searchTerm)) ||
         invoice.totalTTC?.toString().includes(searchTerm)
       );
     })
@@ -888,9 +918,7 @@ const ProformaInvoice = () => {
               <Store className="w-6 h-6 text-blue-600" />
             </div>
           </div>
-          <div className="mt-2 text-sm text-gray-600">
-            Hors taxes
-          </div>
+          <div className="mt-2 text-sm text-gray-600">Hors taxes</div>
         </div>
 
         <div className="bg-white rounded-xl shadow p-4">
@@ -1057,7 +1085,9 @@ const ProformaInvoice = () => {
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-900">
-                            {new Date(invoice.date || invoice.createdAt).toLocaleDateString("fr-FR")}
+                            {new Date(
+                              invoice.date || invoice.createdAt
+                            ).toLocaleDateString("fr-FR")}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -1139,7 +1169,9 @@ const ProformaInvoice = () => {
                           {invoice.invoiceNumber}
                         </h3>
                         <div className="text-sm text-gray-600 mt-1">
-                          {new Date(invoice.date || invoice.createdAt).toLocaleDateString("fr-FR")}
+                          {new Date(
+                            invoice.date || invoice.createdAt
+                          ).toLocaleDateString("fr-FR")}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <Person className="w-4 h-4 text-gray-400" />
@@ -1231,7 +1263,7 @@ const ProformaInvoice = () => {
             <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
               {/* Informations de l'entreprise */}
               <div className="bg-gray-50 rounded-xl p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <Business />
                   Informations de l'entreprise
                 </h3>
@@ -1440,7 +1472,7 @@ const ProformaInvoice = () => {
                         value={clientSearch}
                         onChange={(e) => setClientSearch(e.target.value)}
                         placeholder="Rechercher un client..."
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                        className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none"
                         autoFocus
                       />
                     </div>
@@ -1466,7 +1498,9 @@ const ProformaInvoice = () => {
                                 {client.address && (
                                   <div>Adresse: {client.address}</div>
                                 )}
-                                {(client.n_rc || client.n_if || client.n_is) && (
+                                {(client.n_rc ||
+                                  client.n_if ||
+                                  client.n_is) && (
                                   <div className="text-xs text-gray-500 mt-1">
                                     {client.n_rc && `RC: ${client.n_rc}`}
                                     {client.n_if && `, NIF: ${client.n_if}`}
@@ -1551,14 +1585,19 @@ const ProformaInvoice = () => {
                                       <span className="font-medium">
                                         Détail:
                                       </span>{" "}
-                                      {product.sellingPriceRetail?.toFixed(2) || "0.00"} DA
+                                      {product.sellingPriceRetail?.toFixed(2) ||
+                                        "0.00"}{" "}
+                                      DA
                                     </span>
                                     <span className="flex items-center gap-1">
                                       <Store className="w-3 h-3" />
                                       <span className="font-medium">
                                         Gros:
                                       </span>{" "}
-                                      {product.sellingPriceWholesale?.toFixed(2) || "0.00"} DA
+                                      {product.sellingPriceWholesale?.toFixed(
+                                        2
+                                      ) || "0.00"}{" "}
+                                      DA
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-4">
@@ -1570,7 +1609,8 @@ const ProformaInvoice = () => {
                                       <span className="font-medium">
                                         Stock:
                                       </span>{" "}
-                                      {product.currentQuantity?.toFixed(2) || "0.00"}
+                                      {product.currentQuantity?.toFixed(2) ||
+                                        "0.00"}
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -1735,7 +1775,9 @@ const ProformaInvoice = () => {
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <div className="text-gray-900">{item.tva || 19}%</div>
+                                <div className="text-gray-900">
+                                  {item.tva || 19}%
+                                </div>
                                 <div className="text-xs text-gray-500">
                                   Fixe
                                 </div>
@@ -1871,6 +1913,6 @@ const ProformaInvoice = () => {
       )}
     </div>
   );
-};
+};;
 
 export default ProformaInvoice;

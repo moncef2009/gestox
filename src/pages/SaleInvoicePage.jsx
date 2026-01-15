@@ -41,6 +41,17 @@ const SaleInvoicePage = () => {
   const [openInvoiceDialog, setOpenInvoiceDialog] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
 
+  // Informations de l'entreprise chargées depuis la base de données
+  const [companyInfo, setCompanyInfo] = useState({
+    name: "Votre Entreprise SARL",
+    address: "123 Rue Principale, Ville, Pays",
+    phone: "+213 XX XX XX XX",
+    email: "contact@entreprise.dz",
+    rc: "RC 123456789",
+    nif: "NIF 987654321",
+    nis: "NIS 456789123",
+  });
+
   const [form, setForm] = useState({
     invoiceNumber: "",
     date: new Date().toISOString().split("T")[0],
@@ -109,7 +120,42 @@ const SaleInvoicePage = () => {
     loadInvoices();
     loadClients();
     loadProducts();
+    loadCompanyInfo();
   }, []);
+
+  const loadCompanyInfo = async () => {
+    try {
+      const companies = await window.db.getCompanies();
+      // Trouver l'entreprise courante
+      let currentCompany = companies.find((c) => c.isCurrent === true);
+
+      if (!currentCompany && companies.length > 0) {
+        currentCompany = companies[0];
+      }
+
+      if (currentCompany) {
+        const updatedCompanyInfo = {
+          name: currentCompany.name || "Votre Entreprise SARL",
+          address: currentCompany.address || "123 Rue Principale, Ville, Pays",
+          phone: currentCompany.phone || "+213 XX XX XX XX",
+          email: currentCompany.email || "contact@entreprise.dz",
+          rc: currentCompany.rc || "RC 123456789",
+          nif: currentCompany.nif || "NIF 987654321",
+          nis: currentCompany.nis || "NIS 456789123",
+        };
+
+        setCompanyInfo(updatedCompanyInfo);
+
+        // Mettre à jour le formulaire avec les informations de l'entreprise
+        setForm((prev) => ({
+          ...prev,
+          companyInfo: updatedCompanyInfo,
+        }));
+      }
+    } catch (error) {
+      console.error("Erreur lors du chargement de l'entreprise:", error);
+    }
+  };
 
   const loadInvoices = async () => {
     try {
@@ -243,15 +289,7 @@ const SaleInvoicePage = () => {
       invoiceNumber: newInvoiceNumber,
       date: new Date().toISOString().split("T")[0],
       client: null,
-      companyInfo: {
-        name: "Votre Entreprise SARL",
-        address: "123 Rue Principale, Ville, Pays",
-        phone: "+213 XX XX XX XX",
-        email: "contact@entreprise.dz",
-        rc: "RC 123456789",
-        nif: "NIF 987654321",
-        nis: "NIS 456789123",
-      },
+      companyInfo: companyInfo, // Utiliser les informations de l'entreprise chargées
       items: [],
       status: "completementpayer",
       payedAmount: 0,
@@ -943,15 +981,7 @@ const SaleInvoicePage = () => {
         invoiceNumber: nextInvoiceNumber,
         date: new Date().toISOString().split("T")[0],
         client: null,
-        companyInfo: {
-          name: "Votre Entreprise SARL",
-          address: "123 Rue Principale, Ville, Pays",
-          phone: "+213 XX XX XX XX",
-          email: "contact@entreprise.dz",
-          rc: "RC 123456789",
-          nif: "NIF 987654321",
-          nis: "NIS 456789123",
-        },
+        companyInfo: companyInfo, // Utiliser les infos de l'entreprise chargées
         items: [],
         status: "completementpayer",
         payedAmount: 0,
@@ -1001,16 +1031,7 @@ const SaleInvoicePage = () => {
         ttc: item.ttc,
       })),
       dueDate: invoice.date || new Date().toISOString().split("T")[0],
-      companyInfo: invoice.companyInfo || {
-        name: "Votre Entreprise SARL",
-        address: "123 Rue Principale, Ville, Pays",
-        city: "Ville",
-        phone: "+213 XX XX XX XX",
-        email: "contact@entreprise.dz",
-        rc: "RC 123456789",
-        nif: "NIF 987654321",
-        nis: "NIS 456789123",
-      },
+      companyInfo: invoice.companyInfo || companyInfo, // Utiliser companyInfo chargé
     };
 
     // Lancer l'impression directe
@@ -1480,7 +1501,7 @@ const SaleInvoicePage = () => {
             <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
               {/* Informations de l'entreprise */}
               <div className="bg-gray-50 rounded-xl p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <Business />
                   Informations de l'entreprise
                 </h3>

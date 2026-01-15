@@ -1,6 +1,6 @@
 {
-  "name": "gestox",
-  "productName": "gestox",
+  "name": "gestypro",
+  "productName": "gestypro",
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": ".vite/build/main.js",
