@@ -1,31 +1,27 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Home as HomeIcon,
-  Info as InfoIcon,
   ExpandLess,
   ExpandMore,
   ShoppingCart,
   Store,
   Inventory,
   Receipt,
-  Payment,
   History,
-  CreditCard,
   ShoppingBag,
   ChevronLeft,
   ChevronRight,
   Person,
-  Business, // Icône pour entreprise
-  Storefront, // Icône pour boutique
-  People, // Icône pour utilisateurs
-  AdminPanelSettings, // Icône pour administration
+  Business,
+  AdminPanelSettings,
+  LocalShipping,
 } from "@mui/icons-material";
 
 const Sidebar = ({ open, setOpen }) => {
   const [venteOpen, setVenteOpen] = useState(false);
   const [achatOpen, setAchatOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false); // État pour le dropdown admin
+  const [adminOpen, setAdminOpen] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -68,9 +64,9 @@ const Sidebar = ({ open, setOpen }) => {
 
   const achatItems = [
     {
-      path: "/bon-achat",
-      icon: <ShoppingBag className="w-4 h-4" />,
-      text: "Bon d'achat",
+      path: "/historique-achat",
+      icon: <History className="w-4 h-4" />,
+      text: "Historique d'achat",
     },
     {
       path: "/fournisseurs",
@@ -79,17 +75,11 @@ const Sidebar = ({ open, setOpen }) => {
     },
   ];
 
-  // Nouveau menu Administration
   const adminItems = [
     {
-      path: "/entreprises",
+      path: "/entreprise",
       icon: <Business className="w-4 h-4" />,
-      text: "Entreprises",
-    },
-    {
-      path: "/utilisateurs",
-      icon: <People className="w-4 h-4" />,
-      text: "Utilisateurs",
+      text: "Entreprise",
     },
   ];
 
@@ -102,9 +92,20 @@ const Sidebar = ({ open, setOpen }) => {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gray-900/50">
         {open && (
-          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent tracking-wide">
-            MENU
-          </h1>
+          <div className="flex items-center gap-3">
+            {/* Logo avec border-radius augmenté */}
+            <img
+              src="../icons/icon.jpg"
+              alt="Gesty Pro Logo"
+              className="w-10 h-10 rounded-2xl" // Changé de base à rounded-2xl
+            />
+            {/* Titre avec nouvelle police */}
+            <h1 className="text-xl font-extrabold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent tracking-wide font-sans">
+              {" "}
+              {/* Ajout de font-mono */}
+              GestyPro
+            </h1>
+          </div>
         )}
         <button
           onClick={() => setOpen(!open)}
@@ -113,9 +114,8 @@ const Sidebar = ({ open, setOpen }) => {
           {open ? <ChevronLeft /> : <ChevronRight />}
         </button>
       </div>
-
       {/* Menu Items */}
-      <div className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-120px)]">
+      <div className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-100px)]">
         {/* Main Menu Items */}
         {menuItems.map((item) => (
           <Link
@@ -136,7 +136,9 @@ const Sidebar = ({ open, setOpen }) => {
             </div>
             {open && (
               <span
-                className={`font-medium ${isActive(item.path) ? "text-white" : "text-gray-200"}`}
+                className={`font-medium ${
+                  isActive(item.path) ? "text-white" : "text-gray-200"
+                }`}
               >
                 {item.text}
               </span>
@@ -159,7 +161,12 @@ const Sidebar = ({ open, setOpen }) => {
           >
             <div className="flex items-center gap-3">
               <ShoppingCart className="w-5 h-5 text-cyan-400" />
-              {open && <span className="font-medium text-gray-200">Vente</span>}
+              {open && (
+                <span className="font-medium text-gray-200 font-mono">
+                  Vente
+                </span>
+              )}{" "}
+              {/* Ajout de font-mono */}
             </div>
             {open && (
               <span className="text-cyan-400">
@@ -188,7 +195,10 @@ const Sidebar = ({ open, setOpen }) => {
                   <div className="text-cyan-400">{item.icon}</div>
                   {open && (
                     <span
-                      className={`text-sm ${isActive(item.path) ? "font-medium" : ""}`}
+                      className={`text-sm font-mono ${
+                        /* Ajout de font-mono */
+                        isActive(item.path) ? "font-medium" : ""
+                      }`}
                     >
                       {item.text}
                     </span>
@@ -212,7 +222,12 @@ const Sidebar = ({ open, setOpen }) => {
           >
             <div className="flex items-center gap-3">
               <Store className="w-5 h-5 text-emerald-400" />
-              {open && <span className="font-medium text-gray-200">Achat</span>}
+              {open && (
+                <span className="font-medium text-gray-200 font-mono">
+                  Achat
+                </span>
+              )}{" "}
+              {/* Ajout de font-mono */}
             </div>
             {open && (
               <span className="text-emerald-400">
@@ -241,7 +256,10 @@ const Sidebar = ({ open, setOpen }) => {
                   <div className="text-emerald-400">{item.icon}</div>
                   {open && (
                     <span
-                      className={`text-sm ${isActive(item.path) ? "font-medium" : ""}`}
+                      className={`text-sm font-mono ${
+                        /* Ajout de font-mono */
+                        isActive(item.path) ? "font-medium" : ""
+                      }`}
                     >
                       {item.text}
                     </span>
@@ -252,7 +270,7 @@ const Sidebar = ({ open, setOpen }) => {
           </div>
         </div>
 
-        {/* NOUVELLE SECTION: Administration */}
+        {/* Administration Section */}
         <div>
           <button
             onClick={() => {
@@ -266,7 +284,9 @@ const Sidebar = ({ open, setOpen }) => {
             <div className="flex items-center gap-3">
               <AdminPanelSettings className="w-5 h-5 text-purple-400" />
               {open && (
-                <span className="font-medium text-gray-200">
+                <span className="font-medium text-gray-200 font-mono">
+                  {" "}
+                  {/* Ajout de font-mono */}
                   Administration
                 </span>
               )}
@@ -298,7 +318,10 @@ const Sidebar = ({ open, setOpen }) => {
                   <div className="text-purple-400">{item.icon}</div>
                   {open && (
                     <span
-                      className={`text-sm ${isActive(item.path) ? "font-medium" : ""}`}
+                      className={`text-sm font-mono ${
+                        /* Ajout de font-mono */
+                        isActive(item.path) ? "font-medium" : ""
+                      }`}
                     >
                       {item.text}
                     </span>
@@ -309,13 +332,6 @@ const Sidebar = ({ open, setOpen }) => {
           </div>
         </div>
       </div>
-
-      {/* Footer */}
-      {open && (
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700 bg-gray-900/50 text-center">
-          <p className="text-sm text-gray-500">© 2024 POS System</p>
-        </div>
-      )}
     </div>
   );
 };

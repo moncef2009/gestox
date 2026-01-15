@@ -82,20 +82,14 @@ contextBridge.exposeInMainWorld("db", {
   deleteInvoice: (id) =>
     ipcRenderer.invoke("db-remove", "invoices", { _id: id }, {}),
 
-  // Bons d'achat
-  addBonAchat: (data) => ipcRenderer.invoke("db-insert", "bonsAchat", data),
-  getBonsAchat: () => ipcRenderer.invoke("db-find", "bonsAchat", {}),
-  getBonAchat: (id) => ipcRenderer.invoke("db-find", "bonsAchat", { _id: id }),
-  updateBonAchat: (id, data) =>
-    ipcRenderer.invoke(
-      "db-update",
-      "bonsAchat",
-      { _id: id },
-      { $set: data },
-      {}
-    ),
-  deleteBonAchat: (id) =>
-    ipcRenderer.invoke("db-remove", "bonsAchat", { _id: id }, {}),
+  // Achats (anciennement bons d'achat)
+  addAchat: (data) => ipcRenderer.invoke("db-insert", "achats", data),
+  getAchats: () => ipcRenderer.invoke("db-find", "achats", {}),
+  getAchat: (id) => ipcRenderer.invoke("db-find", "achats", { _id: id }),
+  updateAchat: (id, data) =>
+    ipcRenderer.invoke("db-update", "achats", { _id: id }, { $set: data }, {}),
+  deleteAchat: (id) =>
+    ipcRenderer.invoke("db-remove", "achats", { _id: id }, {}),
 
   // Unités
   addUnit: (data) => ipcRenderer.invoke("db-insert", "units", data),
@@ -119,6 +113,21 @@ contextBridge.exposeInMainWorld("db", {
     ),
   deleteCategory: (id) =>
     ipcRenderer.invoke("db-remove", "categories", { _id: id }, {}),
+
+  // Company (Entreprise)
+  addCompany: (data) => ipcRenderer.invoke("db-insert", "companies", data),
+  getCompanies: () => ipcRenderer.invoke("db-find", "companies", {}),
+  getCompany: (id) => ipcRenderer.invoke("db-find", "companies", { _id: id }),
+  updateCompany: (id, data) =>
+    ipcRenderer.invoke(
+      "db-update",
+      "companies",
+      { _id: id },
+      { $set: data },
+      {}
+    ),
+  deleteCompany: (id) =>
+    ipcRenderer.invoke("db-remove", "companies", { _id: id }, {}),
 });
 
 contextBridge.exposeInMainWorld("printer", {

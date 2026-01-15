@@ -20,15 +20,14 @@ import {
   Inventory,
   ArrowUpward,
   ArrowDownward,
-  Print,
+  Edit as EditIcon,
 } from "@mui/icons-material";
-import BonAchatDialog from "../components/BonAchatDialog";
+import AchatDialog from "../components/AchatDialog";
 import * as XLSX from "xlsx";
-import DirectPrintBonAchat from "../components/DirectPrintBonAchat";
 
-const BonsAchat = () => {
-  const [bonsAchat, setBonsAchat] = useState([]);
-  const [filteredBonsAchat, setFilteredBonsAchat] = useState([]);
+const Achats = () => {
+  const [achats, setAchats] = useState([]);
+  const [filteredAchats, setFilteredAchats] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -43,106 +42,105 @@ const BonsAchat = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
-  const [selectedBonAchat, setSelectedBonAchat] = useState(null);
+  const [selectedAchat, setSelectedAchat] = useState(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentError, setPaymentError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
-  const [expandedBonAchat, setExpandedBonAchat] = useState(null);
-  const [directPrintBonAchat, setDirectPrintBonAchat] = useState(null);
+  const [expandedAchat, setExpandedAchat] = useState(null);
+  const [editingAchat, setEditingAchat] = useState(null);
 
   useEffect(() => {
-    loadBonsAchat();
+    loadAchats();
     loadProduits();
   }, []);
 
-  const loadBonsAchat = async () => {
+  const loadAchats = async () => {
     try {
-      const bonsAchatData = await window.db.getBonsAchat();
-      // Migration pour s'assurer que tous les bons ont payedAmount et remainingAmount
-      const updatedBonsAchat = bonsAchatData.map((bon) => {
-        if (!bon.payedAmount) {
+      const achatsData = await window.db.getAchats();
+      const updatedAchats = achatsData.map((achat) => {
+        if (!achat.payedAmount) {
           return {
-            ...bon,
+            ...achat,
             payedAmount: 0,
-            remainingAmount: bon.total,
+            remainingAmount: achat.total,
             status: "non-payer",
           };
         }
-        return bon;
+        // S'assurer que remainingAmount est calculé
+        const remaining = achat.total - (achat.payedAmount || 0);
+        return {
+          ...achat,
+          remainingAmount: Math.max(0, remaining),
+          status:
+            achat.status ||
+            (remaining === 0
+              ? "completement-payer"
+              : achat.payedAmount > 0
+                ? "partielement-payer"
+                : "non-payer"),
+        };
       });
 
-      setBonsAchat(updatedBonsAchat);
-      // Mettre à jour les bons migrés dans la base de données
-      updatedBonsAchat.forEach(async (bon) => {
-        if (!bon.payedAmount) {
-          await window.db.updateBonAchat(bon._id || bon.id, {
-            payedAmount: 0,
-            remainingAmount: bon.total,
-            status: "non-payer",
-          });
-        }
-      });
+      setAchats(updatedAchats);
     } catch (error) {
-      console.error("Erreur lors du chargement des bons d'achat:", error);
-      setBonsAchat([]);
+      console.error("Erreur lors du chargement des achats:", error);
+      setAchats([]);
     }
   };
 
   const loadProduits = async () => {
     try {
       const produitsData = await window.db.getProducts();
-      // Les produits sont maintenant chargés depuis NeDB
     } catch (error) {
       console.error("Erreur lors du chargement des produits:", error);
     }
   };
 
   useEffect(() => {
-    let result = [...bonsAchat];
+    let result = [...achats];
 
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(
-        (bonAchat) =>
-          bonAchat.numero?.toLowerCase().includes(term) ||
-          bonAchat.fournisseurNom?.toLowerCase().includes(term) ||
-          bonAchat.notes?.toLowerCase().includes(term) ||
-          bonAchat.produits?.some((p) => p.nom?.toLowerCase().includes(term))
+        (achat) =>
+          achat.numero?.toLowerCase().includes(term) ||
+          achat.fournisseurNom?.toLowerCase().includes(term) ||
+          achat.notes?.toLowerCase().includes(term) ||
+          achat.produits?.some((p) => p.nom?.toLowerCase().includes(term))
       );
     }
 
     if (statusFilter !== "all") {
-      result = result.filter((bonAchat) => bonAchat.status === statusFilter);
+      result = result.filter((achat) => achat.status === statusFilter);
     }
 
     if (dateRange.start) {
       const startDate = new Date(dateRange.start);
-      result = result.filter(
-        (bonAchat) => new Date(bonAchat.date) >= startDate
-      );
+      result = result.filter((achat) => new Date(achat.date) >= startDate);
     }
     if (dateRange.end) {
       const endDate = new Date(dateRange.end);
       endDate.setHours(23, 59, 59, 999);
-      result = result.filter((bonAchat) => new Date(bonAchat.date) <= endDate);
+      result = result.filter((achat) => new Date(achat.date) <= endDate);
     }
 
     if (fournisseurFilter) {
       const term = fournisseurFilter.toLowerCase();
-      result = result.filter((bonAchat) =>
-        bonAchat.fournisseurNom?.toLowerCase().includes(term)
+      result = result.filter((achat) =>
+        achat.fournisseurNom?.toLowerCase().includes(term)
       );
     }
 
     if (minAmount) {
       const min = parseFloat(minAmount);
-      result = result.filter((bonAchat) => bonAchat.total >= min);
+      result = result.filter((achat) => achat.total >= min);
     }
     if (maxAmount) {
       const max = parseFloat(maxAmount);
-      result = result.filter((bonAchat) => bonAchat.total <= max);
+      result = result.filter((achat) => achat.total <= max);
     }
 
     result.sort((a, b) => {
@@ -173,10 +171,10 @@ const BonsAchat = () => {
       }
     });
 
-    setFilteredBonsAchat(result);
+    setFilteredAchats(result);
     setCurrentPage(1);
   }, [
-    bonsAchat,
+    achats,
     searchTerm,
     statusFilter,
     dateRange,
@@ -187,32 +185,56 @@ const BonsAchat = () => {
     sortDirection,
   ]);
 
-  // Fonctions pour la gestion des paiements
-  const handleOpenPaymentDialog = (bonAchat) => {
-    setSelectedBonAchat(bonAchat);
-    setPaymentAmount(
-      bonAchat.remainingAmount || bonAchat.total - bonAchat.payedAmount
-    );
+  const handleOpenPaymentDialog = (achat) => {
+    setSelectedAchat(achat);
+    const remaining = achat.remainingAmount || achat.total - achat.payedAmount;
+    setPaymentAmount(remaining);
+    setPaymentError("");
     setShowPaymentDialog(true);
   };
 
   const handleCloseDialogs = () => {
     setShowPaymentDialog(false);
     setShowDeleteDialog(false);
-    setSelectedBonAchat(null);
+    setSelectedAchat(null);
+    setPaymentError("");
+  };
+
+  const handlePaymentAmountChange = (value) => {
+    const amount = parseFloat(value) || 0;
+
+    if (selectedAchat) {
+      const maxAllowed =
+        selectedAchat.remainingAmount ||
+        selectedAchat.total - selectedAchat.payedAmount;
+
+      if (amount > maxAllowed) {
+        setPaymentError(
+          `Le montant ne peut pas dépasser ${maxAllowed.toFixed(2)} DA`
+        );
+        setPaymentAmount(maxAllowed);
+      } else if (amount < 0) {
+        setPaymentError("Le montant ne peut pas être négatif");
+        setPaymentAmount(0);
+      } else {
+        setPaymentError("");
+        setPaymentAmount(amount);
+      }
+    }
   };
 
   const handleMakePayment = async () => {
-    if (!selectedBonAchat || paymentAmount <= 0) return;
+    if (!selectedAchat || paymentAmount <= 0) return;
+
+    if (paymentError) {
+      return;
+    }
 
     try {
-      const updatedBonsAchat = bonsAchat.map((bon) => {
-        if (
-          bon._id === selectedBonAchat._id ||
-          bon.id === selectedBonAchat.id
-        ) {
-          const newPayedAmount = bon.payedAmount + parseFloat(paymentAmount);
-          const newRemaining = Math.max(0, bon.total - newPayedAmount);
+      const updatedAchats = achats.map((achat) => {
+        if (achat._id === selectedAchat._id || achat.id === selectedAchat.id) {
+          const newPayedAmount = achat.payedAmount + parseFloat(paymentAmount);
+          const newRemaining = Math.max(0, achat.total - newPayedAmount);
           const newStatus =
             newRemaining === 0
               ? "completement-payer"
@@ -221,33 +243,32 @@ const BonsAchat = () => {
                 : "partielement-payer";
 
           return {
-            ...bon,
+            ...achat,
             payedAmount: newPayedAmount,
             remainingAmount: newRemaining,
             status: newStatus,
           };
         }
-        return bon;
+        return achat;
       });
 
-      setBonsAchat(updatedBonsAchat);
+      setAchats(updatedAchats);
 
-      // Mettre à jour dans NeDB
-      const bonToUpdate = updatedBonsAchat.find(
-        (bon) =>
-          bon._id === selectedBonAchat._id || bon.id === selectedBonAchat.id
+      const achatToUpdate = updatedAchats.find(
+        (achat) =>
+          achat._id === selectedAchat._id || achat.id === selectedAchat.id
       );
 
-      if (bonToUpdate) {
-        await window.db.updateBonAchat(bonToUpdate._id || bonToUpdate.id, {
-          payedAmount: bonToUpdate.payedAmount,
-          remainingAmount: bonToUpdate.remainingAmount,
-          status: bonToUpdate.status,
+      if (achatToUpdate) {
+        await window.db.updateAchat(achatToUpdate._id || achatToUpdate.id, {
+          payedAmount: achatToUpdate.payedAmount,
+          remainingAmount: achatToUpdate.remainingAmount,
+          status: achatToUpdate.status,
         });
       }
 
       setActionMessage(
-        `Paiement de ${parseFloat(paymentAmount).toFixed(2)} DA enregistré pour le bon #${selectedBonAchat.numero}`
+        `Paiement de ${parseFloat(paymentAmount).toFixed(2)} DA enregistré pour l'achat #${selectedAchat.numero}`
       );
       setTimeout(() => setActionMessage(""), 3000);
 
@@ -260,62 +281,95 @@ const BonsAchat = () => {
   };
 
   const handlePayFullRemaining = () => {
-    if (!selectedBonAchat) return;
+    if (!selectedAchat) return;
     const remaining =
-      selectedBonAchat.remainingAmount ||
-      selectedBonAchat.total - selectedBonAchat.payedAmount;
-    setPaymentAmount(remaining);
+      selectedAchat.remainingAmount ||
+      selectedAchat.total - selectedAchat.payedAmount;
+    handlePaymentAmountChange(remaining);
   };
 
   const handleOpenAddDialog = () => {
+    setEditingAchat(null);
+    setOpenDialog(true);
+  };
+
+  const handleOpenEditDialog = (achat) => {
+    setEditingAchat(achat);
     setOpenDialog(true);
   };
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
+    setEditingAchat(null);
   };
 
-  const handleBonAchatSaved = async (bonAchatData) => {
+  const handleAchatSaved = async (achatData) => {
     try {
-      const newBonAchat = {
-        ...bonAchatData,
-        payedAmount: 0,
-        remainingAmount: bonAchatData.total,
-        status: "non-payer",
+      // Calculer le remainingAmount et le status
+      const remaining = Math.max(
+        0,
+        achatData.total - (achatData.payedAmount || 0)
+      );
+      const status =
+        remaining === 0
+          ? "completement-payer"
+          : (achatData.payedAmount || 0) > 0
+            ? "partielement-payer"
+            : "non-payer";
+
+      const newAchat = {
+        ...achatData,
+        payedAmount: achatData.payedAmount || 0,
+        remainingAmount: remaining,
+        status: status,
       };
 
-      // Ajouter à NeDB
-      const savedBonAchat = await window.db.addBonAchat(newBonAchat);
+      let savedAchat;
+      if (achatData._id) {
+        // Mise à jour d'un achat existant
+        savedAchat = await window.db.updateAchat(achatData._id, newAchat);
 
-      // Mettre à jour l'état local avec l'ID retourné par NeDB
-      const bonAchatWithId = { ...newBonAchat, _id: savedBonAchat._id };
-      setBonsAchat([...bonsAchat, bonAchatWithId]);
+        // Mettre à jour la liste locale
+        setAchats((prev) =>
+          prev.map((a) =>
+            a._id === achatData._id ? { ...newAchat, _id: achatData._id } : a
+          )
+        );
 
-      await updateStockAfterNewBonAchat(bonAchatWithId);
+        // Mettre à jour le stock si nécessaire
+        await updateStockAfterEdit(achatData, editingAchat);
+      } else {
+        // Nouvel achat
+        savedAchat = await window.db.addAchat(newAchat);
+        const achatWithId = { ...newAchat, _id: savedAchat._id };
+        setAchats([...achats, achatWithId]);
 
-      setActionMessage("Bon d'achat ajouté avec succès");
+        await updateStockAfterNewAchat(achatWithId);
+      }
+
+      setActionMessage(
+        achatData._id ? "Achat modifié avec succès" : "Achat ajouté avec succès"
+      );
       setTimeout(() => setActionMessage(""), 3000);
     } catch (error) {
-      console.error("Erreur lors de l'ajout du bon d'achat:", error);
-      setActionMessage("Erreur lors de l'ajout du bon d'achat");
+      console.error("Erreur lors de l'ajout de l'achat:", error);
+      setActionMessage("Erreur lors de l'ajout de l'achat");
       setTimeout(() => setActionMessage(""), 3000);
     }
   };
 
-  const updateStockAfterNewBonAchat = async (bonAchatData) => {
+  const updateStockAfterNewAchat = async (achatData) => {
     try {
       const produits = await window.db.getProducts();
-      const updatedProduits = [...produits];
 
-      for (const produitAchete of bonAchatData.produits) {
+      for (const produitAchete of achatData.produits) {
         if (produitAchete.isNew) {
-          // Ajouter nouveau produit
           const nouveauProduit = {
             id: produitAchete.id,
             name: produitAchete.nom,
             purchasePrice: produitAchete.prixAchat,
-            sellingPriceRetail: produitAchete.prixAchat * 1.3, // 30% de marge par défaut
-            sellingPriceWholesale: produitAchete.prixAchat * 1.2, // 20% pour gros
+            sellingPriceRetail: produitAchete.prixAchat * 1.3,
+            sellingPriceWholesale: produitAchete.prixAchat * 1.2,
             currentQuantity: produitAchete.quantiteAchetee,
             alertQuantity: produitAchete.quantiteAchetee * 0.2,
             unit: produitAchete.unite,
@@ -327,7 +381,6 @@ const BonsAchat = () => {
 
           await window.db.addProduct(nouveauProduit);
         } else {
-          // Mettre à jour produit existant
           const existingProduct = produits.find(
             (p) => p.id === produitAchete.id
           );
@@ -352,46 +405,91 @@ const BonsAchat = () => {
     }
   };
 
-  const handleOpenDeleteDialog = (bonAchat) => {
-    setSelectedBonAchat(bonAchat);
+  const updateStockAfterEdit = async (newAchat, oldAchat) => {
+    try {
+      const produits = await window.db.getProducts();
+
+      // Restaurer les anciennes quantités
+      if (oldAchat && oldAchat.produits) {
+        for (const oldProduit of oldAchat.produits) {
+          if (!oldProduit.isNew) {
+            const existingProduct = produits.find(
+              (p) => p.id === oldProduit.id
+            );
+            if (existingProduct) {
+              const restoredQuantity =
+                existingProduct.currentQuantity - oldProduit.quantiteAchetee;
+              await window.db.updateProduct(
+                existingProduct._id || existingProduct.id,
+                {
+                  currentQuantity: Math.max(0, restoredQuantity),
+                  updatedAt: new Date().toISOString(),
+                }
+              );
+            }
+          }
+        }
+      }
+
+      // Appliquer les nouvelles quantités
+      for (const newProduit of newAchat.produits) {
+        if (!newProduit.isNew) {
+          const existingProduct = produits.find((p) => p.id === newProduit.id);
+          if (existingProduct) {
+            const updatedProduct = {
+              ...existingProduct,
+              currentQuantity:
+                existingProduct.currentQuantity + newProduit.quantiteAchetee,
+              purchasePrice: newProduit.prixAchat,
+              updatedAt: new Date().toISOString(),
+            };
+
+            await window.db.updateProduct(
+              existingProduct._id || existingProduct.id,
+              updatedProduct
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour du stock:", error);
+    }
+  };
+
+  const handleOpenDeleteDialog = (achat) => {
+    setSelectedAchat(achat);
     setShowDeleteDialog(true);
   };
 
-  const handleDeleteBonAchat = async () => {
-    if (!selectedBonAchat) return;
+  const handleDeleteAchat = async () => {
+    if (!selectedAchat) return;
 
     try {
-      // Supprimer de NeDB
-      await window.db.deleteBonAchat(
-        selectedBonAchat._id || selectedBonAchat.id
+      await window.db.deleteAchat(selectedAchat._id || selectedAchat.id);
+
+      const updatedAchats = achats.filter(
+        (a) => (a._id || a.id) !== (selectedAchat._id || selectedAchat.id)
       );
+      setAchats(updatedAchats);
 
-      // Mettre à jour l'état local
-      const updatedBonsAchat = bonsAchat.filter(
-        (ba) =>
-          (ba._id || ba.id) !== (selectedBonAchat._id || selectedBonAchat.id)
-      );
-      setBonsAchat(updatedBonsAchat);
+      await restoreStockAfterDelete(selectedAchat);
 
-      // Restaurer le stock
-      await restoreStockAfterDelete(selectedBonAchat);
-
-      setActionMessage(`Bon d'achat #${selectedBonAchat.numero} supprimé`);
+      setActionMessage(`Achat #${selectedAchat.numero} supprimé`);
       setTimeout(() => setActionMessage(""), 3000);
 
       handleCloseDialogs();
     } catch (error) {
-      console.error("Erreur lors de la suppression du bon d'achat:", error);
+      console.error("Erreur lors de la suppression de l'achat:", error);
       setActionMessage("Erreur lors de la suppression");
       setTimeout(() => setActionMessage(""), 3000);
     }
   };
 
-  const restoreStockAfterDelete = async (bonAchat) => {
+  const restoreStockAfterDelete = async (achat) => {
     try {
       const produits = await window.db.getProducts();
 
-      for (const produitAchete of bonAchat.produits) {
+      for (const produitAchete of achat.produits) {
         const existingProduct = produits.find((p) => p.id === produitAchete.id);
         if (existingProduct) {
           const updatedProduct = {
@@ -431,30 +529,30 @@ const BonsAchat = () => {
   };
 
   const handleExportExcel = () => {
-    const data = filteredBonsAchat.map((bon) => ({
-      ID: bon._id || bon.id,
-      Date: new Date(bon.date).toLocaleDateString("fr-FR"),
-      Fournisseur: bon.fournisseurNom || "Non spécifié",
-      "Total (DA)": bon.total.toFixed(2),
-      "Payé (DA)": bon.payedAmount.toFixed(2),
+    const data = filteredAchats.map((achat) => ({
+      ID: achat._id || achat.id,
+      Date: new Date(achat.date).toLocaleDateString("fr-FR"),
+      Fournisseur: achat.fournisseurNom || "Non spécifié",
+      "Total (DA)": achat.total.toFixed(2),
+      "Payé (DA)": achat.payedAmount.toFixed(2),
       "Reste (DA)": (
-        bon.remainingAmount || bon.total - bon.payedAmount
+        achat.remainingAmount || achat.total - achat.payedAmount
       ).toFixed(2),
-      Statut: formatStatus(bon.status),
-      Produits: bon.produits
+      Statut: formatStatus(achat.status),
+      Produits: achat.produits
         .map((p) => `${p.nom} (${p.quantiteAchetee})`)
         .join(", "),
-      Notes: bon.notes || "",
+      Notes: achat.notes || "",
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Bons d'Achat");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Achats");
 
     XLSX.writeFile(
       workbook,
-      `bons_achat_${new Date().toISOString().split("T")[0]}.xlsx`
+      `achats_${new Date().toISOString().split("T")[0]}.xlsx`
     );
 
     setActionMessage("Export Excel terminé");
@@ -500,46 +598,32 @@ const BonsAchat = () => {
     }
   };
 
-  const toggleProduits = (bonAchatId) => {
-    if (expandedBonAchat === bonAchatId) {
-      setExpandedBonAchat(null);
+  const toggleProduits = (achatId) => {
+    if (expandedAchat === achatId) {
+      setExpandedAchat(null);
     } else {
-      setExpandedBonAchat(bonAchatId);
+      setExpandedAchat(achatId);
     }
   };
 
-  const getTotalItems = (bonAchat) => {
-    return (
-      bonAchat.produits?.reduce(
-        (total, produit) => total + produit.quantiteAchetee,
-        0
-      ) || 0
-    ).toFixed(2);
-  };
-
   const stats = {
-    total: bonsAchat.length,
-    totalTTC: bonsAchat.reduce((sum, ba) => sum + ba.total, 0),
-    totalPayed: bonsAchat.reduce((sum, ba) => sum + ba.payedAmount, 0),
-    totalRemaining: bonsAchat.reduce(
-      (sum, ba) => sum + (ba.remainingAmount || ba.total - ba.payedAmount),
+    total: achats.length,
+    totalTTC: achats.reduce((sum, a) => sum + a.total, 0),
+    totalPayed: achats.reduce((sum, a) => sum + a.payedAmount, 0),
+    totalRemaining: achats.reduce(
+      (sum, a) => sum + (a.remainingAmount || a.total - a.payedAmount),
       0
     ),
-    fournisseurs: [...new Set(bonsAchat.map((ba) => ba.fournisseurNom))].length,
-    completed: bonsAchat.filter((ba) => ba.status === "completement-payer")
-      .length,
-    partial: bonsAchat.filter((ba) => ba.status === "partielement-payer")
-      .length,
-    pending: bonsAchat.filter((ba) => ba.status === "non-payer").length,
+    fournisseurs: [...new Set(achats.map((a) => a.fournisseurNom))].length,
+    completed: achats.filter((a) => a.status === "completement-payer").length,
+    partial: achats.filter((a) => a.status === "partielement-payer").length,
+    pending: achats.filter((a) => a.status === "non-payer").length,
   };
 
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredBonsAchat.slice(
-    indexOfFirstItem,
-    indexOfLastItem
-  );
-  const totalPages = Math.ceil(filteredBonsAchat.length / itemsPerPage);
+  const currentItems = filteredAchats.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredAchats.length / itemsPerPage);
 
   const handlePageChange = (pageNumber) => {
     if (pageNumber >= 1 && pageNumber <= totalPages) {
@@ -570,10 +654,10 @@ const BonsAchat = () => {
           Affichage de{" "}
           <span className="font-semibold">{indexOfFirstItem + 1}</span> à{" "}
           <span className="font-semibold">
-            {Math.min(indexOfLastItem, filteredBonsAchat.length)}
+            {Math.min(indexOfLastItem, filteredAchats.length)}
           </span>{" "}
-          sur <span className="font-semibold">{filteredBonsAchat.length}</span>{" "}
-          bons d'achat
+          sur <span className="font-semibold">{filteredAchats.length}</span>{" "}
+          achats
         </div>
 
         <div className="flex items-center space-x-1">
@@ -629,11 +713,11 @@ const BonsAchat = () => {
     );
   };
 
-  const BonAchatProduits = ({ bonAchat }) => {
-    if (!bonAchat.produits || bonAchat.produits.length === 0) {
+  const AchatProduits = ({ achat }) => {
+    if (!achat.produits || achat.produits.length === 0) {
       return (
         <div className="text-center py-4 text-gray-500">
-          Aucun produit dans ce bon d'achat
+          Aucun produit dans cet achat
         </div>
       );
     }
@@ -654,18 +738,13 @@ const BonsAchat = () => {
                   Prix d'achat (DA)
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">
-                  TVA (%)
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">
-                  Sous-total TTC
+                  Sous-total
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {bonAchat.produits.map((produit, index) => {
-                const sousTotalHT = produit.quantiteAchetee * produit.prixAchat;
-                const tvaMontant = sousTotalHT * (produit.tva / 100);
-                const sousTotalTTC = sousTotalHT + tvaMontant;
+              {achat.produits.map((produit, index) => {
+                const sousTotal = produit.quantiteAchetee * produit.prixAchat;
 
                 return (
                   <tr key={index} className="hover:bg-gray-50">
@@ -693,13 +772,8 @@ const BonsAchat = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-purple-600">
-                        {produit.tva}%
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
                       <div className="font-bold text-emerald-600">
-                        {sousTotalTTC.toFixed(2)} DA
+                        {sousTotal.toFixed(2)} DA
                       </div>
                     </td>
                   </tr>
@@ -712,28 +786,6 @@ const BonsAchat = () => {
     );
   };
 
-  const handleDirectPrint = (bonAchat) => {
-    // Préparer les données pour l'impression directe
-    const bonAchatData = {
-      ...bonAchat,
-      fournisseurAddress:
-        bonAchat.fournisseurAddress || "Adresse non spécifiée",
-      fournisseurCity: bonAchat.fournisseurCity || "Ville non spécifiée",
-      fournisseurTelephone: bonAchat.fournisseurTelephone || "Non spécifié",
-      fournisseurEmail: bonAchat.fournisseurEmail || "Non spécifié",
-      fournisseurRC: bonAchat.fournisseurRC || "",
-      fournisseurNIF: bonAchat.fournisseurNIF || "",
-      fournisseurNIS: bonAchat.fournisseurNIS || "",
-      produits: bonAchat.produits.map((produit) => ({
-        ...produit,
-        unite: produit.unite || "Unité",
-      })),
-    };
-
-    // Lancer l'impression directe
-    setDirectPrintBonAchat(bonAchatData);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4">
       {/* Header */}
@@ -744,7 +796,9 @@ const BonsAchat = () => {
               <LocalShipping className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Bons d'Achat</h1>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Historique des Achats
+              </h1>
               <p className="text-sm text-gray-600">
                 Gestion des achats fournisseurs
               </p>
@@ -772,7 +826,7 @@ const BonsAchat = () => {
               className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-lg hover:shadow flex items-center gap-2"
             >
               <Add className="w-4 h-4" />
-              <span className="hidden sm:inline">Nouveau Bon</span>
+              <span className="hidden sm:inline">Nouvel Achat</span>
             </button>
           </div>
         </div>
@@ -922,7 +976,7 @@ const BonsAchat = () => {
         <div className="bg-white rounded-xl shadow p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Bons</p>
+              <p className="text-sm text-gray-600">Total Achats</p>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
             <div className="p-2 bg-blue-100 rounded-lg">
@@ -947,7 +1001,7 @@ const BonsAchat = () => {
             </div>
           </div>
           <div className="mt-2 text-sm text-gray-600">
-            {stats.completed} bon(s) payé(s)
+            {stats.completed} achat(s) payé(s)
           </div>
         </div>
 
@@ -964,7 +1018,7 @@ const BonsAchat = () => {
             </div>
           </div>
           <div className="mt-2 text-sm text-gray-600">
-            {stats.pending} bon(s) impayé(s)
+            {stats.pending} achat(s) impayé(s)
           </div>
         </div>
 
@@ -981,12 +1035,12 @@ const BonsAchat = () => {
             </div>
           </div>
           <div className="mt-2 text-sm text-gray-600">
-            {stats.partial} bon(s) partiellement payé(s)
+            {stats.partial} achat(s) partiellement payé(s)
           </div>
         </div>
       </div>
 
-      {/* Tableau des bons d'achat */}
+      {/* Tableau des achats */}
       <div className="bg-white rounded-xl shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -1047,7 +1101,7 @@ const BonsAchat = () => {
                   className="px-6 py-4 text-left text-sm font-semibold text-white cursor-pointer hover:bg-blue-800 transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    Total TTC
+                    Total
                     {sortField === "total" &&
                       (sortDirection === "asc" ? (
                         <ArrowUpward className="w-3 h-3" />
@@ -1098,51 +1152,48 @@ const BonsAchat = () => {
                   <td colSpan="9" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center">
                       <LocalShipping className="w-12 h-12 text-gray-400 mb-2" />
-                      <p className="text-gray-600">Aucun bon d'achat trouvé</p>
+                      <p className="text-gray-600">Aucun achat trouvé</p>
                       <p className="text-sm text-gray-500 mt-1">
-                        Modifiez vos critères de recherche ou créez un nouveau
-                        bon d'achat
+                        Modifiez vos critères de recherche ou créez un nouvel
+                        achat
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                currentItems.map((bonAchat) => {
+                currentItems.map((achat) => {
                   const remainingAmount =
-                    bonAchat.remainingAmount ||
-                    bonAchat.total - bonAchat.payedAmount;
+                    achat.remainingAmount || achat.total - achat.payedAmount;
 
                   return (
                     <>
                       <tr
-                        key={bonAchat._id || bonAchat.id}
+                        key={achat._id || achat.id}
                         className="hover:bg-gray-50 transition-colors"
                       >
                         <td className="px-6 py-4">
                           <button
                             onClick={() =>
-                              toggleProduits(bonAchat._id || bonAchat.id)
+                              toggleProduits(achat._id || achat.id)
                             }
                             className="flex items-center gap-2 text-blue-600 hover:text-blue-700"
                           >
-                            {expandedBonAchat === (bonAchat._id || bonAchat.id)
+                            {expandedAchat === (achat._id || achat.id)
                               ? "▼"
                               : "▶"}
                             <span className="text-sm">
-                              {bonAchat.produits?.length || 0} produit(s)
+                              {achat.produits?.length || 0} produit(s)
                             </span>
                           </button>
                         </td>
                         <td className="px-6 py-4">
                           <div className="font-mono font-bold text-gray-900">
-                            {bonAchat.numero}
+                            {achat.numero}
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-900">
-                            {new Date(bonAchat.date).toLocaleDateString(
-                              "fr-FR"
-                            )}
+                            {new Date(achat.date).toLocaleDateString("fr-FR")}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -1150,19 +1201,19 @@ const BonsAchat = () => {
                             <Business className="w-4 h-4 text-gray-400" />
                             <div>
                               <div className="font-medium text-gray-900">
-                                {bonAchat.fournisseurNom}
+                                {achat.fournisseurNom}
                               </div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="font-bold text-gray-900">
-                            {bonAchat.total.toFixed(2)} DA
+                            {achat.total.toFixed(2)} DA
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="font-medium text-emerald-600">
-                            {bonAchat.payedAmount.toFixed(2)} DA
+                            {achat.payedAmount.toFixed(2)} DA
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -1178,33 +1229,28 @@ const BonsAchat = () => {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            {getStatusIcon(bonAchat.status)}
+                            {getStatusIcon(achat.status)}
                             <span
                               className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                bonAchat.status
+                                achat.status
                               )}`}
                             >
-                              {formatStatus(bonAchat.status)}
+                              {formatStatus(achat.status)}
                             </span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex gap-2">
-                            {/* Bouton d'impression */}
                             <button
-                              onClick={() => handleDirectPrint(bonAchat)}
+                              onClick={() => handleOpenEditDialog(achat)}
                               className="p-2 text-blue-600 hover:bg-blue-50 border border-blue-200 rounded-lg transition-colors"
-                              title="Imprimer le bon d'achat"
+                              title="Modifier"
                             >
-                              <Print className="w-4 h-4" />
+                              <EditIcon className="w-4 h-4" />
                             </button>
-
-                            {/* Bouton de paiement */}
                             {remainingAmount > 0 && (
                               <button
-                                onClick={() =>
-                                  handleOpenPaymentDialog(bonAchat)
-                                }
+                                onClick={() => handleOpenPaymentDialog(achat)}
                                 className="p-2 text-emerald-600 hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-colors"
                                 title="Enregistrer un paiement"
                               >
@@ -1212,9 +1258,8 @@ const BonsAchat = () => {
                               </button>
                             )}
 
-                            {/* Bouton suppression seulement */}
                             <button
-                              onClick={() => handleOpenDeleteDialog(bonAchat)}
+                              onClick={() => handleOpenDeleteDialog(achat)}
                               className="p-2 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
                               title="Supprimer"
                             >
@@ -1224,11 +1269,10 @@ const BonsAchat = () => {
                         </td>
                       </tr>
 
-                      {/* Ligne des produits détaillés */}
-                      {expandedBonAchat === (bonAchat._id || bonAchat.id) && (
+                      {expandedAchat === (achat._id || achat.id) && (
                         <tr>
                           <td colSpan="9" className="px-6 py-4 bg-gray-50">
-                            <BonAchatProduits bonAchat={bonAchat} />
+                            <AchatProduits achat={achat} />
                           </td>
                         </tr>
                       )}
@@ -1245,7 +1289,7 @@ const BonsAchat = () => {
       <Pagination />
 
       {/* Dialog de paiement */}
-      {showPaymentDialog && selectedBonAchat && (
+      {showPaymentDialog && selectedAchat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="border-b border-gray-200 px-6 py-4">
@@ -1266,41 +1310,38 @@ const BonsAchat = () => {
             <div className="p-6 space-y-4">
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-medium text-gray-900 mb-2">
-                  Informations du bon d'achat
+                  Informations de l'achat
                 </h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Bon #:</span>
-                    <span className="font-medium">
-                      {selectedBonAchat.numero}
-                    </span>
+                    <span className="text-gray-600">Achat #:</span>
+                    <span className="font-medium">{selectedAchat.numero}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Fournisseur:</span>
                     <span className="font-medium">
-                      {selectedBonAchat.fournisseurNom}
+                      {selectedAchat.fournisseurNom}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Total:</span>
                     <span className="font-bold text-emerald-600">
-                      {selectedBonAchat.total.toFixed(2)} DA
+                      {selectedAchat.total.toFixed(2)} DA
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Déjà payé:</span>
                     <span className="font-medium">
-                      {selectedBonAchat.payedAmount.toFixed(2)} DA
+                      {selectedAchat.payedAmount.toFixed(2)} DA
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Reste à payer:</span>
                     <span className="font-bold text-amber-600">
-                      {selectedBonAchat.remainingAmount
-                        ? selectedBonAchat.remainingAmount.toFixed(2)
+                      {selectedAchat.remainingAmount
+                        ? selectedAchat.remainingAmount.toFixed(2)
                         : (
-                            selectedBonAchat.total -
-                            selectedBonAchat.payedAmount
+                            selectedAchat.total - selectedAchat.payedAmount
                           ).toFixed(2)}{" "}
                       DA
                     </span>
@@ -1321,69 +1362,124 @@ const BonsAchat = () => {
                     step="0.01"
                     min="0"
                     max={
-                      selectedBonAchat.remainingAmount ||
-                      selectedBonAchat.total - selectedBonAchat.payedAmount
+                      selectedAchat.remainingAmount ||
+                      selectedAchat.total - selectedAchat.payedAmount
                     }
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    onChange={(e) => handlePaymentAmountChange(e.target.value)}
+                    className={`w-full pl-10 pr-3 py-2 text-sm border rounded-lg focus:ring-2 focus:outline-none ${
+                      paymentError
+                        ? "border-rose-300 focus:ring-rose-500 focus:border-rose-500"
+                        : "border-gray-300 focus:ring-emerald-500 focus:border-emerald-500"
+                    }`}
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                     <span className="text-xs text-gray-500">DA</span>
                   </div>
                 </div>
+
+                {paymentError && (
+                  <p className="text-sm text-rose-600 mt-1">{paymentError}</p>
+                )}
+
                 <div className="flex flex-wrap gap-1 mt-2">
                   <button
+                    type="button"
                     onClick={handlePayFullRemaining}
-                    className="px-2 py-1 text-xs bg-emerald-100 text-emerald-800 rounded hover:bg-emerald-200"
+                    className="px-2 py-1 text-xs bg-emerald-100 text-emerald-800 rounded hover:bg-emerald-200 transition-colors"
                   >
                     Payer tout le reste (
-                    {selectedBonAchat.remainingAmount
-                      ? selectedBonAchat.remainingAmount.toFixed(2)
+                    {selectedAchat.remainingAmount
+                      ? selectedAchat.remainingAmount.toFixed(2)
                       : (
-                          selectedBonAchat.total - selectedBonAchat.payedAmount
+                          selectedAchat.total - selectedAchat.payedAmount
                         ).toFixed(2)}{" "}
                     DA)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handlePaymentAmountChange(
+                        selectedAchat.remainingAmount / 2
+                      )
+                    }
+                    className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors"
+                  >
+                    Payer la moitié
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePaymentAmountChange(0)}
+                    className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded hover:bg-gray-200 transition-colors"
+                  >
+                    Annuler le paiement
                   </button>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-gray-200">
-                <div className="flex justify-between text-sm font-medium">
-                  <span>Nouveau montant payé:</span>
-                  <span className="text-emerald-600">
-                    {(
-                      selectedBonAchat.payedAmount +
-                      parseFloat(paymentAmount || 0)
-                    ).toFixed(2)}{" "}
-                    DA
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm font-medium mt-1">
-                  <span>Nouveau reste à payer:</span>
-                  <span className="text-amber-600">
-                    {Math.max(
-                      0,
-                      (selectedBonAchat.remainingAmount ||
-                        selectedBonAchat.total - selectedBonAchat.payedAmount) -
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Montant payé actuel:</span>
+                    <span className="text-emerald-600">
+                      {selectedAchat.payedAmount.toFixed(2)} DA
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Montant à ajouter:</span>
+                    <span className="text-blue-600">
+                      {paymentAmount.toFixed(2)} DA
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold pt-2 border-t">
+                    <span>Nouveau montant payé:</span>
+                    <span className="text-emerald-700">
+                      {(
+                        selectedAchat.payedAmount +
                         parseFloat(paymentAmount || 0)
-                    ).toFixed(2)}{" "}
-                    DA
-                  </span>
+                      ).toFixed(2)}{" "}
+                      DA
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Nouveau reste à payer:</span>
+                    <span
+                      className={`${
+                        (selectedAchat.remainingAmount ||
+                          selectedAchat.total - selectedAchat.payedAmount) -
+                          parseFloat(paymentAmount || 0) >
+                        0
+                          ? "text-amber-600"
+                          : "text-emerald-600"
+                      }`}
+                    >
+                      {Math.max(
+                        0,
+                        (selectedAchat.remainingAmount ||
+                          selectedAchat.total - selectedAchat.payedAmount) -
+                          parseFloat(paymentAmount || 0)
+                      ).toFixed(2)}{" "}
+                      DA
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
                 <button
                   onClick={handleCloseDialogs}
-                  className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 font-medium"
+                  className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 font-medium hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   Annuler
                 </button>
                 <button
                   onClick={handleMakePayment}
-                  disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
-                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 text-white text-sm font-medium rounded-lg hover:shadow flex items-center gap-1 disabled:opacity-50"
+                  disabled={
+                    !paymentAmount ||
+                    parseFloat(paymentAmount) <= 0 ||
+                    paymentError
+                  }
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 text-white text-sm font-medium rounded-lg hover:shadow flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   <AttachMoney className="w-4 h-4" />
                   Enregistrer le paiement
@@ -1395,7 +1491,7 @@ const BonsAchat = () => {
       )}
 
       {/* Dialog de suppression */}
-      {showDeleteDialog && selectedBonAchat && (
+      {showDeleteDialog && selectedAchat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="border-b border-gray-200 px-6 py-4">
@@ -1421,40 +1517,39 @@ const BonsAchat = () => {
                   </div>
                 </div>
                 <p className="text-gray-700 text-center mb-2">
-                  Êtes-vous sûr de vouloir supprimer ce bon d'achat ?
+                  Êtes-vous sûr de vouloir supprimer cet achat ?
                 </p>
                 <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4">
                   <div className="text-sm text-rose-800 space-y-1">
                     <div className="flex justify-between">
-                      <span>Bon #:</span>
+                      <span>Achat #:</span>
                       <span className="font-medium">
-                        {selectedBonAchat.numero}
+                        {selectedAchat.numero}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Fournisseur:</span>
                       <span className="font-medium">
-                        {selectedBonAchat.fournisseurNom}
+                        {selectedAchat.fournisseurNom}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Total:</span>
                       <span className="font-bold">
-                        {selectedBonAchat.total.toFixed(2)} DA
+                        {selectedAchat.total.toFixed(2)} DA
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Produits:</span>
                       <span className="font-medium">
-                        {selectedBonAchat.produits?.length || 0} produit(s)
+                        {selectedAchat.produits?.length || 0} produit(s)
                       </span>
                     </div>
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 text-center">
-                  Cette action est irréversible. Le bon d'achat sera
-                  définitivement supprimé et les quantités en stock seront
-                  ajustées.
+                  Cette action est irréversible. L'achat sera définitivement
+                  supprimé et les quantités en stock seront ajustées.
                 </p>
               </div>
 
@@ -1466,7 +1561,7 @@ const BonsAchat = () => {
                   Annuler
                 </button>
                 <button
-                  onClick={handleDeleteBonAchat}
+                  onClick={handleDeleteAchat}
                   className="px-4 py-2 bg-gradient-to-r from-rose-600 to-pink-700 text-white text-sm font-medium rounded-lg hover:shadow flex items-center gap-1"
                 >
                   <Delete className="w-4 h-4" />
@@ -1478,21 +1573,14 @@ const BonsAchat = () => {
         </div>
       )}
 
-      <BonAchatDialog
+      <AchatDialog
         open={openDialog}
         onClose={handleCloseDialog}
-        onBonAchatSaved={handleBonAchatSaved}
+        onAchatSaved={handleAchatSaved}
+        editingAchat={editingAchat}
       />
-
-      {/* Impression directe */}
-      {directPrintBonAchat && (
-        <DirectPrintBonAchat
-          bonAchatData={directPrintBonAchat}
-          onClose={() => setDirectPrintBonAchat(null)}
-        />
-      )}
     </div>
   );
 };
 
-export default BonsAchat;
+export default Achats;

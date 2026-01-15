@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from "uuid";
 import {
   Add,
   Delete,
-  Edit,
   Save,
   Search,
   LocalShipping,
@@ -13,15 +12,10 @@ import {
   Error,
   AttachMoney,
   Business,
-  Inventory,
+  Edit as EditIcon,
 } from "@mui/icons-material";
 
-const BonAchatDialog = ({
-  open,
-  onClose,
-  onBonAchatSaved,
-  editingBonAchat,
-}) => {
+const AchatDialog = ({ open, onClose, onAchatSaved, editingAchat }) => {
   const [form, setForm] = useState({
     numero: "",
     date: new Date().toISOString().split("T")[0],
@@ -42,7 +36,6 @@ const BonAchatDialog = ({
   const [searchProduit, setSearchProduit] = useState("");
   const [showProduitsList, setShowProduitsList] = useState(false);
 
-  // Charger les fournisseurs et produits depuis NeDB
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -58,47 +51,49 @@ const BonAchatDialog = ({
       }
     };
 
-    loadData();
-  }, []);
+    if (open) {
+      loadData();
+    }
+  }, [open]);
 
-  // Générer le prochain numéro (BA-001-2026)
   const generateNextNumero = async () => {
     try {
-      const bonsAchat = await window.db.getBonsAchat();
+      const achats = await window.db.getAchats();
       const currentYear = new Date().getFullYear();
 
-      const currentYearBons = bonsAchat.filter((ba) => {
-        const baYear = ba.numero.split("-")[2];
-        return baYear === currentYear.toString();
+      const currentYearAchats = achats.filter((a) => {
+        const aYear = a.numero.split("-")[2];
+        return aYear === currentYear.toString();
       });
 
-      if (currentYearBons.length === 0) return `BA-001-${currentYear}`;
+      if (currentYearAchats.length === 0) return `ACH-001-${currentYear}`;
 
       const maxNumero = Math.max(
-        ...currentYearBons.map((ba) => {
-          const match = ba.numero.match(/BA-(\d+)-/);
+        ...currentYearAchats.map((a) => {
+          const match = a.numero.match(/ACH-(\d+)-/);
           return match ? parseInt(match[1]) : 0;
         })
       );
 
       const nextNum = (maxNumero + 1).toString().padStart(3, "0");
-      return `BA-${nextNum}-${currentYear}`;
+      return `ACH-${nextNum}-${currentYear}`;
     } catch (error) {
       console.error("Erreur lors de la génération du numéro:", error);
-      return `BA-001-${new Date().getFullYear()}`;
+      return `ACH-001-${new Date().getFullYear()}`;
     }
   };
 
   useEffect(() => {
     const initializeForm = async () => {
-      if (editingBonAchat) {
+      if (editingAchat) {
         setIsEditing(true);
         setForm({
-          ...editingBonAchat,
-          date: editingBonAchat.date.split("T")[0],
-          payedAmount: editingBonAchat.payedAmount || 0,
+          ...editingAchat,
+          date: editingAchat.date.split("T")[0],
+          payedAmount: editingAchat.payedAmount || 0,
+          status: editingAchat.status || "non-payer",
         });
-        setSelectedProduits(editingBonAchat.produits || []);
+        setSelectedProduits(editingAchat.produits || []);
       } else {
         setIsEditing(false);
         const nextNumero = await generateNextNumero();
@@ -109,7 +104,7 @@ const BonAchatDialog = ({
     if (open) {
       initializeForm();
     }
-  }, [editingBonAchat, open]);
+  }, [editingAchat, open]);
 
   const resetForm = (nextNumero = "") => {
     setForm({
@@ -128,33 +123,28 @@ const BonAchatDialog = ({
     setSearchProduit("");
   };
 
-  // Mettre à jour les totaux et le statut
   useEffect(() => {
-    const totalHT = selectedProduits.reduce(
+    const total = selectedProduits.reduce(
       (sum, p) =>
         sum + parseFloat(p.quantiteAchetee || 0) * parseFloat(p.prixAchat || 0),
       0
     );
 
-    const totalTTC = selectedProduits.reduce((sum, p) => {
-      const sousTotal =
-        parseFloat(p.quantiteAchetee || 0) * parseFloat(p.prixAchat || 0);
-      const tva = sousTotal * (parseFloat(p.tva || 0) / 100);
-      return sum + sousTotal + tva;
-    }, 0);
-
     const currentPayedAmount = form.payedAmount || 0;
-    let status = "non-payer";
 
-    if (currentPayedAmount >= totalTTC) {
+    // Logique améliorée pour déterminer le status
+    let status = "non-payer";
+    if (currentPayedAmount >= total && total > 0) {
       status = "completement-payer";
-    } else if (currentPayedAmount > 0) {
+    } else if (currentPayedAmount > 0 && currentPayedAmount < total) {
       status = "partielement-payer";
+    } else if (currentPayedAmount <= 0) {
+      status = "non-payer";
     }
 
     setForm((prev) => ({
       ...prev,
-      total: totalTTC,
+      total,
       status,
     }));
   }, [selectedProduits, form.payedAmount]);
@@ -192,9 +182,9 @@ const BonAchatDialog = ({
       if (payedAmount < 0) payedAmount = 0;
 
       let status = form.status;
-      if (payedAmount >= total) {
+      if (payedAmount >= total && total > 0) {
         status = "completement-payer";
-      } else if (payedAmount > 0) {
+      } else if (payedAmount > 0 && payedAmount < total) {
         status = "partielement-payer";
       } else {
         status = "non-payer";
@@ -241,7 +231,6 @@ const BonAchatDialog = ({
         quantiteAchetee: "1",
         prixAchat: produit.purchasePrice,
         unite: produit.unit || "unité",
-        tva: produit.tva || 19,
         isNew: false,
       };
       setSelectedProduits([...selectedProduits, produitAchete]);
@@ -258,7 +247,6 @@ const BonAchatDialog = ({
       quantiteAchetee: "1",
       prixAchat: "0",
       unite: "unité",
-      tva: "19",
       isNew: true,
     };
     setSelectedProduits([...selectedProduits, nouveauProduit]);
@@ -286,12 +274,14 @@ const BonAchatDialog = ({
     if (!validateForm()) return;
 
     const now = new Date().toISOString();
-    const id = editingBonAchat
-      ? editingBonAchat._id || editingBonAchat.id
-      : uuidv4();
+    const id = editingAchat ? editingAchat._id || editingAchat.id : uuidv4();
 
-    const bonAchatData = {
-      _id: editingBonAchat ? editingBonAchat._id : undefined, // Ne pas inclure _id pour les nouveaux
+    // Utiliser le status calculé depuis le form
+    const currentStatus = form.status;
+    const remainingAmount = Math.max(0, form.total - form.payedAmount);
+
+    const achatData = {
+      _id: editingAchat ? editingAchat._id : id,
       numero: form.numero,
       date: new Date(form.date).toISOString(),
       fournisseurId: form.fournisseurId,
@@ -301,74 +291,111 @@ const BonAchatDialog = ({
         ...p,
         quantiteAchetee: parseFloat(p.quantiteAchetee),
         prixAchat: parseFloat(p.prixAchat),
-        tva: parseFloat(p.tva),
       })),
       total: form.total,
       payedAmount: form.payedAmount,
-      status: form.status,
-      createdAt: editingBonAchat ? editingBonAchat.createdAt : now,
+      status: currentStatus,
+      remainingAmount: remainingAmount,
+      createdAt: editingAchat ? editingAchat.createdAt : now,
       updatedAt: now,
     };
 
     try {
-      // Mettre à jour le stock des produits
+      // Enregistrer l'achat dans la base de données
+      if (editingAchat) {
+        await window.db.updateAchat(achatData._id, achatData);
+      } else {
+        await window.db.addAchat(achatData);
+      }
+
+      // Gérer la mise à jour du stock
       for (const produit of selectedProduits) {
         if (!produit.isNew) {
-          // Pour les produits existants, augmenter le stock
           const existingProduit = produits.find(
             (p) => (p._id || p.id) === produit.id
           );
           if (existingProduit) {
+            // Si on est en édition, on doit restaurer les anciennes quantités d'abord
+            if (editingAchat && editingAchat.produits) {
+              const oldProduit = editingAchat.produits.find(
+                (op) => op.id === produit.id
+              );
+              if (oldProduit) {
+                const restoredQuantity =
+                  existingProduit.currentQuantity - oldProduit.quantiteAchetee;
+                await window.db.updateProduct(
+                  existingProduit._id || existingProduit.id,
+                  {
+                    currentQuantity: Math.max(0, restoredQuantity),
+                    updatedAt: new Date().toISOString(),
+                  }
+                );
+              }
+            }
+
+            // Appliquer les nouvelles quantités
             const newQuantity =
               (existingProduit.currentQuantity || 0) +
               parseFloat(produit.quantiteAchetee);
             await window.db.updateProduct(
               existingProduit._id || existingProduit.id,
-              { currentQuantity: newQuantity }
+              {
+                currentQuantity: newQuantity,
+                purchasePrice: parseFloat(produit.prixAchat),
+                updatedAt: new Date().toISOString(),
+              }
             );
           }
         } else {
-          // Pour les nouveaux produits, les créer dans la base
+          // Nouveau produit
           const newProductData = {
             name: produit.nom,
             purchasePrice: parseFloat(produit.prixAchat),
-            sellingPriceRetail: parseFloat(produit.prixAchat) * 1.3, // 30% de marge par défaut
-            sellingPriceWholesale: parseFloat(produit.prixAchat) * 1.2, // 20% de marge pour gros
+            sellingPriceRetail: parseFloat(produit.prixAchat) * 1.3,
+            sellingPriceWholesale: parseFloat(produit.prixAchat) * 1.2,
             currentQuantity: parseFloat(produit.quantiteAchetee),
             unit: produit.unite,
-            tva: parseFloat(produit.tva),
             category: "Acheté",
             barcodes: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           };
           await window.db.addProduct(newProductData);
         }
       }
 
-      // Si édition, restaurer l'ancien stock d'abord
-      if (editingBonAchat && editingBonAchat.produits) {
-        for (const oldProduit of editingBonAchat.produits) {
+      // Restaurer le stock des produits supprimés pendant l'édition
+      if (editingAchat && editingAchat.produits) {
+        for (const oldProduit of editingAchat.produits) {
           if (!oldProduit.isNew) {
-            const existingProduit = produits.find(
-              (p) => (p._id || p.id) === oldProduit.id
+            const wasRemoved = !selectedProduits.find(
+              (p) => p.id === oldProduit.id
             );
-            if (existingProduit) {
-              const restoredQuantity =
-                (existingProduit.currentQuantity || 0) -
-                parseFloat(oldProduit.quantiteAchetee);
-              await window.db.updateProduct(
-                existingProduit._id || existingProduit.id,
-                { currentQuantity: Math.max(0, restoredQuantity) }
+            if (wasRemoved) {
+              const existingProduit = produits.find(
+                (p) => p.id === oldProduit.id
               );
+              if (existingProduit) {
+                const restoredQuantity =
+                  existingProduit.currentQuantity - oldProduit.quantiteAchetee;
+                await window.db.updateProduct(
+                  existingProduit._id || existingProduit.id,
+                  {
+                    currentQuantity: Math.max(0, restoredQuantity),
+                    updatedAt: new Date().toISOString(),
+                  }
+                );
+              }
             }
           }
         }
       }
 
-      onBonAchatSaved(bonAchatData, isEditing ? "edit" : "add");
+      onAchatSaved(achatData);
       resetForm();
       onClose();
     } catch (error) {
-      console.error("Erreur lors de l'enregistrement du bon d'achat:", error);
+      console.error("Erreur lors de l'enregistrement de l'achat:", error);
       alert("Une erreur est survenue lors de l'enregistrement");
     }
   };
@@ -388,31 +415,7 @@ const BonAchatDialog = ({
   const calculateSousTotal = (produit) => {
     const qty = parseFloat(produit.quantiteAchetee) || 0;
     const prix = parseFloat(produit.prixAchat) || 0;
-    const tva = parseFloat(produit.tva) || 0;
-    const sousTotalHT = qty * prix;
-    const tvaMontant = sousTotalHT * (tva / 100);
-    return (sousTotalHT + tvaMontant).toFixed(2);
-  };
-
-  const calculateTotalHT = () => {
-    return selectedProduits
-      .reduce(
-        (sum, p) =>
-          sum +
-          parseFloat(p.quantiteAchetee || 0) * parseFloat(p.prixAchat || 0),
-        0
-      )
-      .toFixed(2);
-  };
-
-  const calculateTotalTVA = () => {
-    return selectedProduits
-      .reduce((sum, p) => {
-        const sousTotalHT =
-          parseFloat(p.quantiteAchetee || 0) * parseFloat(p.prixAchat || 0);
-        return sum + sousTotalHT * (parseFloat(p.tva || 0) / 100);
-      }, 0)
-      .toFixed(2);
+    return (qty * prix).toFixed(2);
   };
 
   const calculateRemaining = () => {
@@ -422,11 +425,11 @@ const BonAchatDialog = ({
   const getStatusColor = (status) => {
     switch (status) {
       case "completement-payer":
-        return "bg-green-100 text-green-800";
+        return "bg-emerald-100 text-emerald-800";
       case "partielement-payer":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-amber-100 text-amber-800";
       case "non-payer":
-        return "bg-red-100 text-red-800";
+        return "bg-rose-100 text-rose-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -435,11 +438,11 @@ const BonAchatDialog = ({
   const getStatusIcon = (status) => {
     switch (status) {
       case "completement-payer":
-        return <CheckCircle className="w-5 h-5" />;
+        return <CheckCircle className="w-5 h-5 text-emerald-500" />;
       case "partielement-payer":
-        return <Warning className="w-5 h-5" />;
+        return <Warning className="w-5 h-5 text-amber-500" />;
       case "non-payer":
-        return <Error className="w-5 h-5" />;
+        return <Error className="w-5 h-5 text-rose-500" />;
       default:
         return null;
     }
@@ -454,7 +457,7 @@ const BonAchatDialog = ({
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
               <LocalShipping />
-              {isEditing ? "Modifier Bon d'Achat" : "Nouveau Bon d'Achat"}
+              {isEditing ? "Modifier Achat" : "Nouvel Achat"}
             </h2>
             <button
               onClick={handleClose}
@@ -640,7 +643,7 @@ const BonAchatDialog = ({
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Quantité
@@ -683,23 +686,7 @@ const BonAchatDialog = ({
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        TVA (%)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={produit.tva}
-                        onChange={(e) =>
-                          handleUpdateProduit(index, "tva", e.target.value)
-                        }
-                        min="0"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Sous-total TTC
+                        Sous-total
                       </label>
                       <div className="px-3 py-2 bg-gray-100 rounded-lg">
                         <span className="font-medium text-gray-900">
@@ -771,35 +758,41 @@ const BonAchatDialog = ({
                         target: { name: "payedAmount", value: 0 },
                       })
                     }
-                    className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded hover:bg-red-200"
+                    className="px-2 py-1 text-xs bg-rose-100 text-rose-800 rounded hover:bg-rose-200"
                   >
                     Rien payer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const remaining = Math.max(
+                        0,
+                        form.total - form.payedAmount
+                      );
+                      handleChange({
+                        target: {
+                          name: "payedAmount",
+                          value: form.payedAmount + remaining,
+                        },
+                      });
+                    }}
+                    className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+                  >
+                    Payer le reste ({calculateRemaining()} DA)
                   </button>
                 </div>
               </div>
 
               {/* Totaux */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="text-sm text-gray-600">Total HT</div>
-                  <div className="text-xl font-bold text-gray-900">
-                    {calculateTotalHT()} DA
-                  </div>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="text-sm text-gray-600">Total TVA</div>
-                  <div className="text-xl font-bold text-gray-900">
-                    {calculateTotalTVA()} DA
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg">
-                  <div className="text-sm text-blue-600">Total TTC</div>
+                  <div className="text-sm text-blue-600">Total</div>
                   <div className="text-xl font-bold text-blue-900">
                     {form.total.toFixed(2)} DA
                   </div>
                 </div>
                 <div
-                  className={`p-4 rounded-lg ${form.status === "completement-payer" ? "bg-green-50" : form.status === "partielement-payer" ? "bg-yellow-50" : "bg-red-50"}`}
+                  className={`p-4 rounded-lg ${form.status === "completement-payer" ? "bg-emerald-50" : form.status === "partielement-payer" ? "bg-amber-50" : "bg-rose-50"}`}
                 >
                   <div className="text-sm text-gray-600">
                     {form.status === "completement-payer"
@@ -809,7 +802,7 @@ const BonAchatDialog = ({
                         : "Reste à payer"}
                   </div>
                   <div
-                    className={`text-xl font-bold ${form.status === "completement-payer" ? "text-green-900" : form.status === "partielement-payer" ? "text-yellow-900" : "text-red-900"}`}
+                    className={`text-xl font-bold ${form.status === "completement-payer" ? "text-emerald-900" : form.status === "partielement-payer" ? "text-amber-900" : "text-rose-900"}`}
                   >
                     {form.payedAmount.toFixed(2)} DA
                     {form.status === "partielement-payer" && (
@@ -837,7 +830,7 @@ const BonAchatDialog = ({
               className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-medium rounded-lg shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-indigo-800 transition-all duration-300 flex items-center justify-center gap-2"
             >
               <Save />
-              {isEditing ? "Mettre à jour" : "Enregistrer le bon d'achat"}
+              {isEditing ? "Mettre à jour" : "Enregistrer l'achat"}
             </button>
           </div>
         </form>
@@ -846,4 +839,4 @@ const BonAchatDialog = ({
   );
 };
 
-export default BonAchatDialog;
+export default AchatDialog;

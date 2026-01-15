@@ -37,8 +37,9 @@ const db = {
     filename: path.join(app.getPath("userData"), "invoices.db"),
     autoload: true,
   }),
-  bonsAchat: new Datastore({
-    filename: path.join(app.getPath("userData"), "bonsAchat.db"),
+  achats: new Datastore({
+    // CHANGÉ DE "bonsAchat" À "achats"
+    filename: path.join(app.getPath("userData"), "achats.db"),
     autoload: true,
   }),
   units: new Datastore({
@@ -47,6 +48,10 @@ const db = {
   }),
   categories: new Datastore({
     filename: path.join(app.getPath("userData"), "categories.db"),
+    autoload: true,
+  }),
+  companies: new Datastore({
+    filename: path.join(app.getPath("userData"), "companies.db"),
     autoload: true,
   }),
 };
@@ -100,7 +105,7 @@ async function printTicket(ticketContent) {
       // =======================
       const separator = "****************************************\n";
       const line = "----------------------------------------\n";
-      
+
       // En-tête
       const header = Buffer.concat([
         escpos.INIT,
@@ -115,24 +120,35 @@ async function printTicket(ticketContent) {
       // Informations du ticket
       const ticketInfo = Buffer.concat([
         escpos.ALIGN_LEFT,
-        Buffer.from(`Date: ${ticketContent.date || new Date().toLocaleString()}\n`, "ascii"),
-        Buffer.from(`Ticket: ${ticketContent.ticketNumber || "N/A"}\n`, "ascii"),
+        Buffer.from(
+          `Date: ${ticketContent.date || new Date().toLocaleString()}\n`,
+          "ascii"
+        ),
+        Buffer.from(
+          `Ticket: ${ticketContent.ticketNumber || "N/A"}\n`,
+          "ascii"
+        ),
         Buffer.from(line, "ascii"),
       ]);
 
       // Articles
-      const items = ticketContent.items ? ticketContent.items.flatMap((item) => [
-        Buffer.from(
-          `${(item.name || "").substring(0, 20)} : ${item.quantity || 0} x ${(item.unitPrice || 0).toFixed(2)} = ${(item.subtotal || 0).toFixed(2)} DA\n`,
-          "ascii"
-        ),
-      ]) : [];
+      const items = ticketContent.items
+        ? ticketContent.items.flatMap((item) => [
+            Buffer.from(
+              `${(item.name || "").substring(0, 20)} : ${item.quantity || 0} x ${(item.unitPrice || 0).toFixed(2)} = ${(item.subtotal || 0).toFixed(2)} DA\n`,
+              "ascii"
+            ),
+          ])
+        : [];
 
       // Total et paiement
       const footer = Buffer.concat([
         Buffer.from(line, "ascii"),
         escpos.ALIGN_RIGHT,
-        Buffer.from(`TOTAL : ${(ticketContent.total || 0).toFixed(2)} DA\n`, "ascii"),
+        Buffer.from(
+          `TOTAL : ${(ticketContent.total || 0).toFixed(2)} DA\n`,
+          "ascii"
+        ),
         Buffer.from(
           `PAYE  : ${(ticketContent.payedAmount || 0).toFixed(2)} DA\n`,
           "ascii"
@@ -231,6 +247,8 @@ const createWindow = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  console.log("USER DATA PATH =", app.getPath("userData"));
+
   createWindow();
 
   // On OS X it's common to re-create a window in the app when the
@@ -250,6 +268,3 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
