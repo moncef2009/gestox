@@ -95,7 +95,7 @@ const Sidebar = ({ open, setOpen }) => {
           <div className="flex items-center gap-3">
             {/* Logo avec border-radius augmenté */}
             <img
-              src="../icons/icon.jpg"
+              src="../assets/icond.jpg"
               alt="Gesty Pro Logo"
               className="w-10 h-10 rounded-2xl" // Changé de base à rounded-2xl
             />
