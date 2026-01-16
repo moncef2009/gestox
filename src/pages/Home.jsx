@@ -49,8 +49,9 @@ const SalePage = () => {
   const [sortDirection, setSortDirection] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const productsPerPage = 4;
-
-  const scanTimeoutRef = useRef(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [barcodeBuffer, setBarcodeBuffer] = useState("");
+  const barcodeTimeoutRef = useRef(null);
 
   // Service d'impression
   const { isPrinting, printSaleTicket, testPrinterConnection } =
@@ -81,9 +82,55 @@ const SalePage = () => {
     }
   };
 
+  // Gestionnaire principal pour le scan de code-barres
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === "F12") {
+      // Ignorer si on est dans un champ de saisie
+      if (
+        e.target.tagName === "INPUT" ||
+        e.target.tagName === "TEXTAREA" ||
+        e.target.tagName === "SELECT"
+      ) {
+        return;
+      }
+
+      // Accepter seulement les caractères alphanumériques pour les codes-barres
+      if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
+        e.preventDefault();
+
+        // Ajouter le caractère au buffer
+        const newBuffer = barcodeBuffer + e.key;
+        setBarcodeBuffer(newBuffer);
+        setIsScanning(true);
+
+        // Réinitialiser le timer
+        if (barcodeTimeoutRef.current) {
+          clearTimeout(barcodeTimeoutRef.current);
+        }
+
+        // Attendre un moment pour voir si d'autres caractères arrivent
+        barcodeTimeoutRef.current = setTimeout(() => {
+          // Si le buffer a une longueur raisonnable pour un code-barres
+          if (newBuffer.length >= 8) {
+            processBarcode(newBuffer);
+          }
+          setBarcodeBuffer("");
+          setIsScanning(false);
+        }, 100); // 100ms après la dernière touche
+      }
+
+      // Certains scanners envoient Enter à la fin
+      if (e.key === "Enter" && barcodeBuffer.length > 0) {
+        e.preventDefault();
+        if (barcodeBuffer.length >= 8) {
+          processBarcode(barcodeBuffer);
+        }
+        setBarcodeBuffer("");
+        setIsScanning(false);
+      }
+
+      // Raccourcis clavier pour la vente (uniquement si pas en train de scanner)
+      if (e.key === "F12" && barcodeBuffer.length === 0) {
         e.preventDefault();
         handleOpenConfirmDialog();
       }
@@ -91,7 +138,8 @@ const SalePage = () => {
       if (
         e.key === "Enter" &&
         !e.target.matches("input, textarea, select") &&
-        !showConfirmDialog
+        !showConfirmDialog &&
+        barcodeBuffer.length === 0
       ) {
         e.preventDefault();
         handleQuickSale();
@@ -101,38 +149,40 @@ const SalePage = () => {
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      if (barcodeTimeoutRef.current) {
+        clearTimeout(barcodeTimeoutRef.current);
+      }
     };
-  }, [addedToSale, showConfirmDialog]);
+  }, [barcodeBuffer, addedToSale, showConfirmDialog]);
 
-  useEffect(() => {
-    const total = calculateTotal();
+  // Fonction pour traiter un code-barres scanné
+  const processBarcode = (barcode) => {
+    if (!barcode) return;
 
-    if (saleForm.status === "completementpayer") {
-      setSaleForm((prev) => ({
-        ...prev,
-        payedAmount: total,
-      }));
-    } else if (saleForm.status === "nonpayer") {
-      setSaleForm((prev) => ({
-        ...prev,
-        payedAmount: 0,
-      }));
-    } else if (saleForm.payedAmount > total) {
-      setSaleForm((prev) => ({
-        ...prev,
-        payedAmount: total,
-      }));
+    const matches = products.filter((product) =>
+      product.barcodes?.some(
+        (productBarcode) => productBarcode.toString() === barcode.trim()
+      )
+    );
+
+    if (matches.length === 1) {
+      addProductFromList(matches[0]);
+      setSaleMessage(`${matches[0].name} ajouté au panier`);
+      setTimeout(() => setSaleMessage(""), 2000);
+    } else if (matches.length === 0) {
+      setSaleMessage(`Produit avec code-barres ${barcode} non trouvé`);
+      setTimeout(() => setSaleMessage(""), 3000);
     }
-  }, [saleForm.status, addedToSale]);
+  };
 
   const handleAutoScan = (value) => {
-    if (!value) return;
+    if (!value || value.length < 3) return;
 
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
+    if (barcodeTimeoutRef.current) {
+      clearTimeout(barcodeTimeoutRef.current);
     }
 
-    scanTimeoutRef.current = setTimeout(() => {
+    barcodeTimeoutRef.current = setTimeout(() => {
       const matches = products.filter((product) =>
         product.barcodes?.some((barcode) => barcode.toString() === value)
       );
@@ -143,7 +193,7 @@ const SalePage = () => {
         setSearchResults([]);
         setSelectedResultIndex(-1);
       }
-    }, 80);
+    }, 50);
   };
 
   useEffect(() => {
@@ -765,6 +815,16 @@ const SalePage = () => {
 
   return (
     <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen relative">
+      {/* Indicateur de scan */}
+      {isScanning && (
+        <div className="fixed top-4 right-4 z-50 animate-pulse">
+          <div className="bg-blue-600 text-white px-3 py-1 rounded-lg flex items-center gap-2 shadow-lg">
+            <div className="w-2 h-2 bg-white rounded-full animate-ping"></div>
+            Scan en cours...
+          </div>
+        </div>
+      )}
+
       {/* En-tête */}
       <div className="mb-2">
         <div className="flex items-center justify-between mb-2">
@@ -774,6 +834,14 @@ const SalePage = () => {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Caisse</h1>
+              <div className="text-xs text-gray-600 flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  Prêt à scanner
+                </div>
+                <span>•</span>
+                <span>Scanner un code-barres pour ajouter au panier</span>
+              </div>
             </div>
           </div>
           <div className="text-right">
@@ -785,7 +853,7 @@ const SalePage = () => {
         </div>
       </div>
 
-      {/* Barre de recherche */}
+      {/* Barre de recherche (optionnelle) */}
       <div className="mb-2">
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -824,9 +892,8 @@ const SalePage = () => {
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Rechercher produit..."
+            placeholder="Rechercher produit ou scanner code-barres..."
             className="w-full pl-10 pr-4 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
-            autoFocus
           />
         </div>
       </div>
@@ -841,7 +908,7 @@ const SalePage = () => {
         ) : (
           <div className="flex items-center gap-2 text-gray-500">
             <Info className="w-4 h-4" />
-            Messages de vente s'afficheront ici...
+            Scanner un code-barres pour ajouter au panier...
           </div>
         )}
       </div>
@@ -934,6 +1001,11 @@ const SalePage = () => {
                           {product.sellingPriceRetail.toFixed(2)} DA
                         </span>
                       </div>
+                      {product.barcodes && product.barcodes.length > 0 && (
+                        <div className="text-xs text-gray-500">
+                          Code-barres: {product.barcodes[0]}
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={() => addProductFromList(product)}
@@ -993,6 +1065,9 @@ const SalePage = () => {
               <div className="text-center py-8">
                 <div className="text-4xl mb-2">🛒</div>
                 <p className="text-sm text-gray-600">Panier vide</p>
+                <p className="text-xs text-gray-500 mt-2">
+                  Scanner un code-barres pour ajouter un produit
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto">

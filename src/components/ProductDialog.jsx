@@ -649,8 +649,22 @@ const ProductDialog = ({
                     placeholder={`Code-barres ${index + 1}`}
                     value={barcode}
                     onChange={(e) => handleBarcodeChange(index, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault(); // ← empêche le submit du formulaire
+                        const nextIndex = index + 1;
+                        // Si tu veux, tu peux automatiquement ajouter un nouveau champ et focus dessus :
+                        if (nextIndex === form.barcodes.length)
+                          addBarcodeField();
+                        document
+                          .getElementById(`barcode-${nextIndex}`)
+                          ?.focus();
+                      }
+                    }}
+                    id={`barcode-${index}`}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                   />
+
                   <button
                     type="button"
                     onClick={() => removeBarcodeField(index)}
@@ -767,7 +781,6 @@ const ProductDialog = ({
                     type="text"
                     value={newUnit}
                     onChange={(e) => setNewUnit(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && handleAddUnit()}
                     placeholder="Nom de l'unité"
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                     autoFocus
@@ -863,7 +876,6 @@ const ProductDialog = ({
                     type="text"
                     value={newCategory}
                     onChange={(e) => setNewCategory(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && handleAddCategory()}
                     placeholder="Nom de la catégorie"
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
                     autoFocus
